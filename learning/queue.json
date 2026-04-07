@@ -1,0 +1,17 @@
+[
+  {
+    "doc_id": "manual-example-local-llm",
+    "priority": 0.9,
+    "status": "done"
+  },
+  {
+    "doc_id": "manual-cli-manual-example",
+    "priority": 1.0,
+    "status": "doing"
+  },
+  {
+    "doc_id": "auto-cli-auto-example",
+    "priority": 0.5,
+    "status": "todo"
+  }
+]
