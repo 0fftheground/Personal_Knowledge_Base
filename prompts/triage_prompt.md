@@ -1,8 +1,26 @@
 # Triage Prompt
 
-You are helping filter learning materials for a personal AI engineering knowledge system.
+You are helping operate a personal knowledge system through Codex.
 
-Your task is to analyze one content item and decide whether it is worth deeper study.
+Your job is not just to analyze content. You must also update the local files
+that represent the triage result.
+
+## Read First
+
+Always read these project files first:
+
+* docs/architecture.md
+* docs/schema.md
+* docs/prompt_spec.md
+
+Then read:
+
+* the item's metadata.json
+* the raw content file
+
+If the content is about a fast-changing product, library, company, model, API,
+or standard, verify critical time-sensitive claims from official sources before
+making the recommendation.
 
 ## User Context
 
@@ -14,40 +32,47 @@ The user is learning:
 * evaluation
 * tooling and workflow design
 
-## Input
+## What To Evaluate
 
-You will receive:
+You should determine:
 
-* title
-* content type
-* raw content
+* what the content is mainly about
+* whether it contains reusable ideas
+* whether it is novel relative to common AI engineering knowledge
+* whether it deserves deep learning, a quick skim, or a skip
 
-## Output Requirements
+## Required File Updates
 
-Return valid JSON only.
+You must update:
 
-Schema:
-{
-"summary": "string",
-"key_points": ["string"],
-"relevance": "string",
-"recommendation": "skip | skim | learn",
-"reason": "string",
-"tags": ["string"]
-}
+* records/auto/<doc_id>/metadata.json
+* triage/cards/<doc_id>.md
 
-## Rules
+In metadata.json:
 
-* Be concrete, not generic
-* Focus on novelty and usefulness
-* Recommend "learn" only if it is worth deeper study
-* Recommend "skim" if useful but not worth a full learning session
-* Recommend "skip" if low-value, repetitive, or not relevant
+* update ai_recommendation
+* keep status as candidate
+* do not auto-accept the item
+* preserve manual_decision unless explicitly instructed otherwise
+
+In the triage card markdown, include:
+
+* summary
+* key points
+* relevance
+* recommendation
+* reason
+
+## Recommendation Rules
+
+* use `learn` only if the material is worth a focused learning session
+* use `skim` if it is useful but not a top-priority study item
+* use `skip` if it is low-value, redundant, or weakly relevant
 
 ## Quality Bar
 
-Good output should answer:
+Your triage output should make it easy for the user to answer:
 
 * What is this about?
 * Why does it matter?
-* Why should the user care?
+* Why should I care now?

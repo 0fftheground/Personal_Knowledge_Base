@@ -64,6 +64,7 @@ def list_candidates(root: Path | None = None) -> list[dict[str, object]]:
 def accept_candidate(doc_id: str, root: Path | None = None) -> dict[str, object]:
     item = _load_candidate(doc_id, root)
     item["status"] = "accepted"
+    item["manual_decision"] = "accept"
     storage.write_content_item(item, root)
     entry = storage.create_queue_entry(item["id"], item["priority"], "todo")
     storage.upsert_queue_entry(entry, root)
@@ -74,6 +75,7 @@ def accept_candidate(doc_id: str, root: Path | None = None) -> dict[str, object]
 def reject_candidate(doc_id: str, root: Path | None = None) -> dict[str, object]:
     item = _load_candidate(doc_id, root)
     item["status"] = "rejected"
+    item["manual_decision"] = "reject"
     storage.write_content_item(item, root)
     storage.remove_queue_entry(doc_id, root)
     LOGGER.info("Rejected candidate: %s", doc_id)
@@ -83,6 +85,7 @@ def reject_candidate(doc_id: str, root: Path | None = None) -> dict[str, object]
 def defer_candidate(doc_id: str, root: Path | None = None) -> dict[str, object]:
     item = _load_candidate(doc_id, root)
     item["priority"] = 0.0
+    item["manual_decision"] = "later"
     storage.write_content_item(item, root)
     LOGGER.info("Deferred candidate by lowering priority to 0.0: %s", doc_id)
     return item
@@ -98,7 +101,7 @@ def _load_candidate(doc_id: str, root: Path | None = None) -> dict[str, object]:
 
 
 def _triage_card_path(doc_id: str, root: Path) -> Path:
-    return root / "triage" / "cards" / f"{doc_id}.md"
+    return storage.get_triage_cards_root(root) / f"{doc_id}.md"
 
 
 def _build_summary(text: str) -> str:

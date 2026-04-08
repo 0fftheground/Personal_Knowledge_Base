@@ -50,6 +50,8 @@ def read_status(doc_id: str, root: Path | None = None) -> dict[str, object]:
     return {
         "item": item,
         "state": state,
+        "open_questions": [] if state is None else list(state["questions"]),
+        "next_action": _status_next_action(item, state),
     }
 
 
@@ -143,9 +145,41 @@ def _next_action(current_chunk: int, chunks_total: int) -> str:
     return f"Process chunk {current_chunk + 1} of {chunks_total}"
 
 
+def _status_next_action(
+    item: dict[str, object],
+    state: dict[str, object] | None,
+) -> str:
+    if state is not None:
+        if not state["outline_generated"]:
+            return f"Run pkls learn prompt --id {item['id']} --mode outline"
+        return str(state["next_action"])
+    if item["status"] == "accepted":
+        return f"Run pkls learn prompt --id {item['id']} --mode outline"
+    if item["status"] == "candidate":
+        return "Await triage decision"
+    if item["status"] == "rejected":
+        return "No action required"
+    if item["status"] == "archived":
+        return "Item is archived"
+    if item["status"] == "done":
+        return "Review generated learning outputs"
+    return "Resume learning"
+
+
 def _write_outputs(item: dict[str, object], state: dict[str, object], root: Path) -> None:
-    output_dir = root / "learning" / "outputs" / item["id"]
+    output_dir = storage.get_learning_outputs_root(root) / item["id"]
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    if state["outline_generated"] or state["document_outline"] or state["core_summary"]:
+        outline = (
+            f"# Outline for {item['title']}\n\n"
+            "## Core Summary\n\n"
+            f"{state['core_summary'] or 'Outline not generated yet.'}\n\n"
+            "## Document Outline\n\n"
+            + ("\n".join(f"- {point}" for point in state["document_outline"]) or "- Outline not generated yet.")
+            + "\n"
+        )
+        (output_dir / "outline.md").write_text(outline, encoding="utf-8")
 
     summary = (
         f"# {item['title']}\n\n"

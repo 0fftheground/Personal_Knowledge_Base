@@ -7,12 +7,18 @@
 "title": "string",
 "source_type": "auto | manual",
 "content_type": "paper | blog | github | book",
-"path": "string",
 "ingest_date": "YYYY-MM-DD",
-"status": "candidate | accepted | rejected | learning | done",
+"status": "candidate | accepted | rejected | learning | done | archived",
 "priority": 0.0,
 "ai_recommendation": "skip | skim | learn",
-"manual_decision": null
+"manual_decision": "accept | reject | later | null",
+"storage_tier": "full | sync_only",
+"full_raw_relpath": "string | null",
+"sync_raw_relpath": "string | null",
+"source_filename": "string",
+"source_device": "string | null",
+"content_hash": "string | null",
+"sync_status": "none | active | inbox"
 }
 
 ---
@@ -39,6 +45,9 @@
 "chunks_total": 0,
 "key_points": [],
 "questions": [],
+"outline_generated": false,
+"document_outline": [],
+"core_summary": "string",
 "next_action": "string",
 "status": "learning | done"
 }
@@ -54,3 +63,15 @@
 "status": "todo | doing | done"
 }
 ]
+
+---
+
+## Local Config
+
+{
+"device_name": "string | null",
+"raw_full_root": "string | null",
+"raw_sync_root": "string | null",
+"workspace_root": "string | null",
+"obsidian_vault_path": "string | null"
+}

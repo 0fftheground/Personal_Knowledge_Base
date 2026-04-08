@@ -14,20 +14,21 @@
 
 Used in:
 
-* pkls triage run
+* pkls triage prompt --id <content_id>
 
 Input:
 
 * title
 * content type
-* raw content
+* record metadata
+* resolved raw content path
 
-Output:
+Codex should:
 
-* summary
-* key points
-* recommendation
-* tags
+* read record metadata + raw content
+* optionally verify time-sensitive claims from official sources
+* update metadata.json
+* write `<workspace_root>/triage/cards/<id>.md`
 
 ---
 
@@ -35,28 +36,36 @@ Output:
 
 Used in:
 
-* pkls learn start
-* pkls learn resume
+* pkls learn prompt --id <content_id> --mode outline
+* pkls learn prompt --id <content_id> --mode deep_dive [--focus "..."]
 
 Input:
 
 * metadata
 * current learning state
-* one chunk
+* resolved raw content
+* optional user focus request
 
-Output:
+Codex should support two modes:
 
-* chunk summary
-* key points
-* questions
-* insights
-* next action
+* outline:
+  * generate a document-level outline
+  * write core summary
+  * initialize or update state.json
+  * write `<workspace_root>/learning/outputs/<id>/outline.md`
+* deep_dive:
+  * use current state + outline
+  * process one chunk or one focused unit
+  * update state.json incrementally
+  * update `<workspace_root>/learning/outputs/<id>/summary.md`
+  * update `<workspace_root>/learning/outputs/<id>/insights.md`
+  * update `<workspace_root>/learning/outputs/<id>/qa.md`
 
 ---
 
 ### Question Refine Prompt
 
-Used optionally after learning prompt
+Reserved for future workflow extensions.
 
 Purpose:
 
@@ -67,7 +76,7 @@ Purpose:
 
 ## Constraints
 
-* prompts must return structured JSON
-* no markdown in model output
-* no whole-document summary in chunk learning
+* prompts are for Codex execution, not raw JSON API calls
+* Codex must update files directly
 * no hidden memory assumptions
+* learning remains state-driven from raw + state

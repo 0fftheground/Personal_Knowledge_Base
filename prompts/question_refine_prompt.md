@@ -1,33 +1,29 @@
 # Question Refine Prompt
 
-You are refining learning questions in a personal knowledge system.
+You are refining questions produced during learning.
 
-## Input
+## Read
 
-You will receive:
+Before refining, read:
 
-* current document metadata
-* current learning state
-* one or more generated questions
+* the item's metadata.json
+* learning/states/<doc_id>/state.json
+* learning/outputs/<doc_id>/qa.md
 
-## Output
+## Goal
 
-Return valid JSON only.
+Improve question quality without breaking resumability.
 
-Schema:
-{
-"refined_questions": [
-{
-"question": "string",
-"type": "clarification | connection | application",
-"reason": "string"
-}
-]
-}
+## Required Updates
+
+Update:
+
+* learning/states/<doc_id>/state.json
+* learning/outputs/<doc_id>/qa.md
 
 ## Rules
 
-* Remove vague or generic questions
-* Make each question actionable
-* Keep questions specific to the document
-* Prefer questions that can guide future learning or note-taking
+* remove vague or generic questions
+* keep questions grounded in the document
+* prefer questions that support future deep dive or note-making
+* preserve useful existing questions instead of rewriting everything

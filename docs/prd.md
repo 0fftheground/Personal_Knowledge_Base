@@ -20,13 +20,13 @@ Build a personal system that:
 
 * Input: RSS / GitHub / web content
 * Flow:
-  raw/auto → AI triage → candidate → user decision → learning
+  external raw store → record → AI triage → candidate → user decision → learning
 
 #### 2. Manual Pipeline
 
 * Input: user-added content (PDF, repo, article)
 * Flow:
-  raw/manual → directly into learning
+  external raw store → record → directly into learning
 
 ---
 
@@ -88,6 +88,7 @@ System should produce:
 * triage cards (markdown)
 * learning outputs:
 
+  * outline.md
   * summary.md
   * insights.md
   * qa.md

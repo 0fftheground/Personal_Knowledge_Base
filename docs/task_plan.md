@@ -4,14 +4,15 @@
 
 ### Goal
 
-Implement basic filesystem + JSON storage
+Implement external raw storage + workspace record storage
 
 ### Tasks
 
 * create directory structure
 * implement:
 
-  * content item creation
+  * content record creation
+  * raw file ingest into full/sync stores
   * queue read/write
   * state read/write
 
@@ -32,11 +33,11 @@ Implement basic filesystem + JSON storage
 
 ### Goal
 
-Process raw/auto into candidate cards
+Process auto records into candidate cards
 
 ### Tasks
 
-* read raw/auto
+* resolve raw content from external stores
 * generate:
 
   * summary
@@ -59,15 +60,17 @@ Process raw/auto into candidate cards
 
 ### Goal
 
-Implement chunk-based learning
+Implement outline-first, chunk-based learning
 
 ### Tasks
 
 * chunk content
+* generate document outline first
 * process one chunk
 * update state
 * generate:
 
+  * outline.md
   * summary.md
   * insights.md
   * qa.md
@@ -105,10 +108,13 @@ Basic commands
 
 ### Commands
 
-* add_manual
-* run_triage
-* start_learning
-* resume_learning
+* add
+* raw inbox-add / promote / sync
+* triage
+* learn
+* status
+* publish
+* config
 
 ---
 

@@ -88,6 +88,9 @@ Output:
 * questions
 * optional insights
 
+Before chunk-by-chunk deep dive, the system may first generate a document-level
+outline and a short core summary to help the user choose what to explore next.
+
 ---
 
 ## 3. Question Generation (CRITICAL)
@@ -173,6 +176,7 @@ No reliance on:
 
 For each document:
 
+* outline.md (document structure + core summary)
 * summary.md (cumulative)
 * insights.md (high-value ideas)
 * qa.md (questions + answers)

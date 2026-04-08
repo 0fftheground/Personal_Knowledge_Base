@@ -11,14 +11,15 @@
 ## Storage
 
 * Content item saved with metadata
-* Files stored in correct directories
+* Raw files stored in configured full or sync directories
+* Records stored under `<workspace_root>/records/`
 * No data loss on restart
 
 ---
 
 ## Triage
 
-* Each raw/auto item produces:
+* Each auto record produces:
 
   * summary
   * key points
@@ -52,6 +53,7 @@
 
 Each document must generate:
 
+* outline.md
 * summary.md
 * insights.md
 * qa.md

@@ -2,74 +2,93 @@
 
 ## Overview
 
-This project is a local-first AI-assisted learning system.
+This project is a local-first knowledge workflow for collecting material,
+triaging it, learning it incrementally, and publishing readable outputs into
+Obsidian.
 
-It supports:
+The repository stores:
 
-* automatic content ingestion
-* AI triage (summarization + recommendation)
-* user-driven learning decisions
-* resumable learning across devices
-* structured knowledge output
+* scripts
+* prompts
+* docs
 
----
-
-## Architecture
-
-See:
-
-* docs/architecture.md
-
-Main structure:
-
-* raw/
-* triage/
-* learning/
-* notes/
+Raw files and user workspace data live outside the repository in configured
+local directories.
 
 ---
 
-## Core Idea
+## Storage Layers
 
-Learning is:
+### Full Raw Store
 
-* state-driven
-* incremental
-* resumable
+Long-term archive for original files.
 
-NOT based on chat history.
+### Active Sync Store
+
+Cross-device active subset and inbox area.
+
+### User Workspace Store
+
+External user data directory.
+
+### Obsidian Notes Layer
+
+Mobile reading and long-term knowledge notes.
 
 ---
 
-## Pipelines
+## Repository Structure
 
-### Auto
-
-raw/auto → triage → candidate → user decision → learning
-
-### Manual
-
-raw/manual → learning
+* `scripts/`
+* `prompts/`
+* `docs/`
 
 ---
 
 ## Running (MVP)
 
-Steps:
+Before first use:
 
-1. Add content to raw/
-2. Run triage
-3. Accept selected items
-4. Run learning
+1. Copy `.pkls.local.example.json` to `.pkls.local.json`
+2. Replace the example paths with real machine-local paths
+3. Keep `.pkls.local.json` out of git
+
+Then:
+
+1. Configure local paths with `python -m scripts.pkls config ...`
+2. Add content with `python -m scripts.pkls add ...`
+3. Generate Codex prompts for triage or learning
+4. Let Codex update cards, state, and outputs
+5. Publish readable outputs to Obsidian
+
+Primary usage guide:
+
+* `docs/how_to_use.md`
 
 ---
 
 ## Docs
 
-* docs/prd.md
-* docs/schema.md
-* docs/learning_strategy.md
-* docs/task_plan.md
+Recommended reading order:
+
+* `docs/how_to_use.md` - end-to-end operating guide
+* `docs/codex_workflow.md` - Codex-assisted triage and learning flow
+* `docs/cli_spec.md` - CLI command reference
+* `docs/prd.md` - product intent
+* `docs/architecture.md` - storage and workflow layout
+* `docs/schema.md` - JSON structures
+* `docs/learning_strategy.md` - learning-stage design
+
+Document addresses:
+
+* `.pkls.local.example.json`
+* `docs/how_to_use.md`
+* `docs/codex_workflow.md`
+* `docs/cli_spec.md`
+* `docs/prd.md`
+* `docs/architecture.md`
+* `docs/schema.md`
+* `docs/learning_strategy.md`
 
 ---
 
@@ -77,53 +96,18 @@ Steps:
 
 MVP in development:
 
-* storage layer
-* triage
-* learning
+* workspace-based state storage
+* external raw full/sync stores
+* Codex-assisted triage
+* Codex-assisted learning
+* Obsidian publish path configuration
 
----
+## Local Config
 
-## Future
+Use:
 
-* SQLite state
-* background jobs
-* API layer
+* `.pkls.local.example.json` as the git-tracked example
+* `.pkls.local.json` as the real local machine config
 
-
-## Developing prompts
-
-Read the following files first:
-
-- AGENTS.md
-- docs/prd.md
-- docs/architecture.md
-- docs/schema.md
-- docs/task_plan.md
-- docs/acceptance_criteria.md
-- tasks/task_01_storage.md
-
-Task:
-Implement task_01_storage.md exactly.
-
-Requirements:
-- follow docs/schema.md strictly
-- follow docs/architecture.md strictly
-- keep implementation minimal and modular
-- use filesystem + JSON only (no database)
-
-Process:
-1. First output a concise implementation plan
-2. Then implement step by step
-3. After implementation, perform the Audit Step defined in task_01_storage.md
-4. Fix any issues found in audit before finishing
-
-Constraints:
-- Do NOT add UI
-- Do NOT add cloud logic
-- Do NOT add vector database or RAG
-- Do NOT modify unrelated modules
-
-Output:
-- working code
-- example data
-- brief explanation of structure
+`.pkls.local.json` is intentionally ignored by git because it contains
+machine-specific paths and user-specific workspace locations.
