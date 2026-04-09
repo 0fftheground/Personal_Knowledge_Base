@@ -53,19 +53,21 @@ These values are stored in `.pkls.local.json` and are not committed.
 Use these commands most often:
 
 ```bash
-python -m scripts.pkls add manual --type <paper|blog|github|book> --path <file> --title "<title>"
-python -m scripts.pkls add auto --type <paper|blog|github|book> --path <file> --title "<title>"
-python -m scripts.pkls raw inbox-add auto --type <paper|blog|github|book> --path <file> --title "<title>"
+python -m scripts.pkls add manual --type <paper|blog|github|book> --path <file> [--title "<title>"] [--accept]
+python -m scripts.pkls add auto --type <paper|blog|github|book> --path <file> [--title "<title>"] [--accept]
+python -m scripts.pkls raw inbox-add auto --type <paper|blog|github|book> --path <file> [--title "<title>"] [--accept]
 python -m scripts.pkls raw promote --id <content_id>
 python -m scripts.pkls raw sync --id <content_id>
 
 python -m scripts.pkls triage list
 python -m scripts.pkls triage prompt --id <content_id>
+python -m scripts.pkls triage prompt-batch --limit 5
 python -m scripts.pkls triage accept --id <content_id>
 python -m scripts.pkls triage reject --id <content_id>
 python -m scripts.pkls triage later --id <content_id>
 
 python -m scripts.pkls learn queue
+python -m scripts.pkls learn next
 python -m scripts.pkls learn prompt --id <content_id> --mode outline
 python -m scripts.pkls learn prompt --id <content_id> --mode deep_dive --focus "<focus>"
 
@@ -80,20 +82,29 @@ python -m scripts.pkls status --id <content_id>
 ### 1. Add content into the auto pipeline
 
 ```bash
-python -m scripts.pkls add auto --type blog --path .\article.md --title "Interesting Article"
+python -m scripts.pkls add auto --type blog --path .\article.md
+```
+
+If the file content looks like a URL list instead of article text, the CLI detects that automatically:
+
+```bash
+python -m scripts.pkls add auto --type blog --path .\url_list.txt
 ```
 
 This will:
 
 * copy the file into configured raw stores
 * create `<workspace_root>/records/auto/<doc_id>/metadata.json`
-* set `status = candidate`
+* derive the title from content or filename when not provided
+* set `status = candidate` by default
+* set `status = accepted` only when `--accept` is provided
+* when the input is detected as a URL list, fetch each URL and create one item per webpage
 
 If you are on a non-archive machine and only want to submit content into the
 shared sync area, use:
 
 ```bash
-python -m scripts.pkls raw inbox-add auto --type blog --path .\article.md --title "Interesting Article"
+python -m scripts.pkls raw inbox-add auto --type blog --path .\article.md
 ```
 
 This writes the file into the sync inbox and records `sync_status = inbox`.
@@ -116,12 +127,30 @@ This prompt tells Codex:
 * which record metadata file to inspect
 * which resolved raw content file to inspect
 * which triage card to update
+* which Obsidian triage note path to publish when the card is complete
+
+The CLI saves this prompt to:
+
+* `<workspace_root>/triage/prompts/<content_id>.md`
+
+For a small sequential batch of candidate items without triage cards, use:
+
+```bash
+python -m scripts.pkls triage prompt-batch --limit 5
+```
+
+This saves one batch prompt file under:
+
+* `<workspace_root>/triage/prompts/batch-next-<N>.md`
+
+When you run later `pkls triage ...` commands, the CLI also syncs any complete
+triage cards into the configured Obsidian publish path.
 
 ### 4. Give that prompt to Codex
 
 Codex should update:
 
-* `<workspace_root>/records/auto/<doc_id>/metadata.json`
+* `<workspace_root>/records/<source_type>/<doc_id>/metadata.json`
 * `<workspace_root>/triage/cards/<doc_id>.md`
 
 ### 5. Make the triage decision
@@ -136,18 +165,29 @@ python -m scripts.pkls triage later --id <content_id>
 
 ## Manual Content Workflow
 
-### 1. Add content directly into learning
+### 1. Add content into the manual pipeline
 
 ```bash
-python -m scripts.pkls add manual --type blog --path .\notes.md --title "My Notes"
+python -m scripts.pkls add manual --type blog --path .\notes.md
+python -m scripts.pkls add manual --type blog --path .\links.list
+python -m scripts.pkls add manual --type blog --path .\notes.md --accept
+```
+
+If the file contains webpage URLs instead of note text, the CLI detects that automatically:
+
+```bash
+python -m scripts.pkls add manual --type blog --path .\url_list.txt
 ```
 
 This will:
 
 * copy the file into configured raw stores
 * create `<workspace_root>/records/manual/<doc_id>/metadata.json`
-* set `status = accepted`
-* add the item to `<workspace_root>/learning/queue.json`
+* derive the title from content or filename when not provided
+* set `status = candidate` by default
+* set `status = accepted` only when `--accept` is provided
+* add accepted items to `<workspace_root>/learning/queue.json`
+* when the input is detected as a URL list, fetch each URL and create one item per webpage
 
 ---
 
@@ -163,13 +203,21 @@ Run:
 python -m scripts.pkls learn prompt --id <content_id> --mode outline
 ```
 
+Or let the queue choose the next item:
+
+```bash
+python -m scripts.pkls learn next
+```
+
 This tells Codex to:
 
 * read the record metadata
 * read the resolved raw content
+* read and update `learning/queue.json`
 * create or update `state.json`
 * generate a document-level outline
 * generate a short core summary
+* set metadata status to `learning`
 * write `<workspace_root>/learning/outputs/<doc_id>/outline.md`
 
 ### Phase 2: Deep Dive On Demand
@@ -186,6 +234,8 @@ This tells Codex to:
 * use the outline as context
 * process one coherent learning unit
 * update state incrementally
+* update `learning/queue.json`
+* update metadata status to `learning` or `done`
 * update the cumulative output files
 
 ---

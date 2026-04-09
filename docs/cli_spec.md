@@ -16,23 +16,39 @@
 
 ### Add Manual Content
 
-pkls add manual --type <paper|blog|github|book> --path <file> --title <title>
+pkls add manual --type <paper|blog|github|book> --path <file> [--title <title>] [--accept]
 
 Behavior:
 
 * copy content into configured raw stores
 * create metadata under `<workspace_root>/records/manual/`
-* set status = accepted
+* default to `candidate`
+* use `accepted` only when `--accept` is provided
+* skip creating a new item when the same file hash already exists
+* derive a title from content or filename when `--title` is omitted
 
 ### Add Auto Content
 
-pkls add auto --type <paper|blog|github|book> --path <file> --title <title>
+pkls add auto --type <paper|blog|github|book> --path <file> [--title <title>] [--accept]
 
 Behavior:
 
 * copy content into configured raw stores
 * create metadata under `<workspace_root>/records/auto/`
-* set status = candidate
+* auto-detect URL list input vs regular file input
+* default to `candidate`
+* use `accepted` only when `--accept` is provided
+* skip creating a new item when the same file hash already exists
+* derive a title from content or filename when `--title` is omitted
+
+If the file content looks like a URL list, the CLI automatically:
+
+* reads URLs from the file
+* fetches each webpage and stores a text snapshot in configured raw stores
+* creates one metadata record per URL under `<workspace_root>/records/`
+* uses `candidate` by default
+* uses `accepted` only when `--accept` is provided
+* skips URLs already present in existing raw snapshots
 
 ---
 
@@ -40,13 +56,17 @@ Behavior:
 
 ### Add To Sync Inbox
 
-pkls raw inbox-add <auto|manual> --type <paper|blog|github|book> --path <file> --title <title>
+pkls raw inbox-add <auto|manual> --type <paper|blog|github|book> --path <file> [--title <title>] [--accept]
 
 Behavior:
 
 * copy content into `<raw_sync_root>/inbox/<device_name>/...`
 * create metadata under `<workspace_root>/records/`
 * set `sync_status = inbox`
+* default to `candidate`
+* use `accepted` only when `--accept` is provided
+* skip creating a new item when the same file hash already exists
+* derive a title from content or filename when `--title` is omitted
 
 ### Promote To Full Archive
 
@@ -72,20 +92,15 @@ Behavior:
 
 ## 3. Triage
 
-### Run Triage
-
-pkls triage run
-
-Behavior:
-
-* process auto records not yet triaged
-* resolve raw content from external full/sync paths
-* generate triage cards
-* update metadata
-
 ### List Candidates
 
 pkls triage list
+
+Behavior:
+
+* show current candidate items from both `auto` and `manual`
+* include triage recommendation when available
+* include triage summary and reason when a triage card exists
 
 ### Generate Codex Triage Prompt
 
@@ -93,8 +108,20 @@ pkls triage prompt --id <content_id>
 
 Behavior:
 
-* print a Codex-ready triage prompt
+* write a Codex-ready triage prompt to `<workspace_root>/triage/prompts/<content_id>.md`
 * point Codex to the record metadata, resolved raw file, and target card
+
+### Generate Codex Triage Prompts In Batch
+
+pkls triage prompt-batch [--limit <N>]
+
+Behavior:
+
+* select candidate items that do not yet have triage cards
+* order them by priority, then title
+* write one batch prompt file under `<workspace_root>/triage/prompts/`
+* tell Codex which items to process in sequence and where each triage card should be written
+* default `--limit` to `5`
 
 ### Accept
 
@@ -130,6 +157,30 @@ Behavior:
 
 pkls learn queue
 
+Behavior:
+
+* show items already in the learning flow
+* include queue status, progress, chunk progress, and next action
+
+### View Learning Progress
+
+pkls learn list
+
+Behavior:
+
+* show items already in the learning flow
+* include queue status, progress, chunk progress, and next action
+
+### Generate Prompt For Next Queue Item
+
+pkls learn next [--focus <text>]
+
+Behavior:
+
+* sync queue.json against metadata and learning state
+* select the highest-priority actionable item
+* print a Codex-ready prompt in `outline` or `deep_dive` mode
+
 ### Generate Codex Learning Prompt
 
 pkls learn prompt --id <content_id> --mode <outline|deep_dive> [--focus <text>]
@@ -140,36 +191,6 @@ Behavior:
 * resolve the raw content path from full/sync stores
 * in `outline` mode, instruct Codex to generate document structure first
 * in `deep_dive` mode, instruct Codex to process one focused learning step
-
-### Start Learning
-
-pkls learn start --id <content_id>
-
-Behavior:
-
-* initialize learning state
-* read resolved raw content
-* process first chunk
-
-### Resume Learning
-
-pkls learn resume --id <content_id>
-
-Behavior:
-
-* load learning state
-* continue from next chunk
-
-### Learn Next
-
-pkls learn next
-
-Behavior:
-
-* select next accepted item from queue
-* start or resume learning
-
----
 
 ## 5. Status
 

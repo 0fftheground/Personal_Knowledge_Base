@@ -7,6 +7,7 @@ from pathlib import Path
 
 from scripts import local_config
 from scripts import storage
+from scripts import triage
 
 
 PUBLISH_ROOT_DIR = "pkls"
@@ -18,6 +19,9 @@ def publish_triage(doc_id: str, root: Path | None = None) -> Path:
     card_path = storage.get_triage_cards_root(base) / f"{item['id']}.md"
     if not card_path.exists():
         raise FileNotFoundError(card_path)
+    card = triage.read_triage_card(doc_id, base)
+    if not triage.is_triage_card_complete(card):
+        raise ValueError(f"triage card is incomplete and cannot be published: {doc_id}")
 
     publish_root = _publish_root(base)
     target_path = publish_root / "triage" / f"{item['id']}.md"
@@ -67,6 +71,19 @@ def publish_item(doc_id: str, root: Path | None = None) -> list[Path]:
 
     if not published_paths:
         raise FileNotFoundError(f"no triage or learning outputs found for {doc_id}")
+    return published_paths
+
+
+def sync_complete_triage_cards(root: Path | None = None) -> list[Path]:
+    base = root or storage.get_repo_root()
+    published_paths: list[Path] = []
+
+    for item in storage.list_content_items(root=base):
+        card = triage.read_triage_card(item["id"], base)
+        if not triage.is_triage_card_complete(card):
+            continue
+        published_paths.append(publish_triage(item["id"], base))
+
     return published_paths
 
 

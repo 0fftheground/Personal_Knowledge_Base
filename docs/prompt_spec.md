@@ -28,7 +28,9 @@ Codex should:
 * read record metadata + raw content
 * optionally verify time-sensitive claims from official sources
 * update metadata.json
-* write `<workspace_root>/triage/cards/<id>.md`
+* evaluate truthfulness, reliability, and learning value
+* write `<workspace_root>/triage/cards/<id>.md` with summary, key points, recommendation, and reason
+* publish the triage card into the Obsidian notes path when the card is complete
 
 ---
 
@@ -42,6 +44,7 @@ Used in:
 Input:
 
 * metadata
+* queue.json
 * current learning state
 * resolved raw content
 * optional user focus request
@@ -50,6 +53,8 @@ Codex should support two modes:
 
 * outline:
   * generate a document-level outline
+  * update metadata status to `learning`
+  * update `queue.json` status to `doing`
   * write core summary
   * initialize or update state.json
   * write `<workspace_root>/learning/outputs/<id>/outline.md`
@@ -57,6 +62,8 @@ Codex should support two modes:
   * use current state + outline
   * process one chunk or one focused unit
   * update state.json incrementally
+  * update metadata status to `learning` or `done`
+  * update `queue.json` status to `doing` or `done`
   * update `<workspace_root>/learning/outputs/<id>/summary.md`
   * update `<workspace_root>/learning/outputs/<id>/insights.md`
   * update `<workspace_root>/learning/outputs/<id>/qa.md`

@@ -31,6 +31,7 @@ LEARNING_STATE_DEFAULTS = {
     "core_summary": "",
 }
 DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+MAX_DOC_ID_LENGTH = 80
 
 
 class StorageError(ValueError):
@@ -57,6 +58,10 @@ def get_triage_cards_root(root: Path | None = None) -> Path:
     return get_workspace_root(root) / "triage" / "cards"
 
 
+def get_triage_prompts_root(root: Path | None = None) -> Path:
+    return get_workspace_root(root) / "triage" / "prompts"
+
+
 def get_learning_root(root: Path | None = None) -> Path:
     return get_workspace_root(root) / "learning"
 
@@ -80,6 +85,7 @@ def ensure_storage_layout(root: Path | None = None) -> None:
         workspace_root / "records" / "auto",
         workspace_root / "records" / "manual",
         workspace_root / "triage" / "cards",
+        workspace_root / "triage" / "prompts",
         workspace_root / "learning" / "states",
         workspace_root / "learning" / "outputs",
         workspace_root / "notes",
@@ -332,7 +338,11 @@ def resolve_raw_path(item: dict[str, Any], root: Path | None = None) -> Path:
 
 def read_raw_text_for_item(item: dict[str, Any], root: Path | None = None) -> str:
     content_path = resolve_raw_path(item, root)
-    text = content_path.read_text(encoding="utf-8")
+    try:
+        text = content_path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        LOGGER.error("Failed to decode raw content as utf-8: %s", content_path)
+        raise StorageError(f"raw file is not valid utf-8 text: {content_path}") from exc
     LOGGER.info("Read raw content: %s", content_path)
     return text
 
@@ -344,6 +354,10 @@ def build_doc_id(title: str, source_type: str, root: Path | None = None) -> str:
     base = root or get_repo_root()
     slug_parts = re.findall(r"[a-z0-9]+", title.lower())
     slug = "-".join(slug_parts) or "item"
+    max_slug_length = MAX_DOC_ID_LENGTH - len(source_type) - 1
+    if len(slug) > max_slug_length:
+        slug = slug[:max_slug_length].rstrip("-")
+    slug = slug or "item"
     prefix = f"{source_type}-{slug}"
     doc_id = prefix
     index = 2
@@ -355,6 +369,21 @@ def build_doc_id(title: str, source_type: str, root: Path | None = None) -> str:
 
     LOGGER.info("Generated doc id %s for title %s", doc_id, title)
     return doc_id
+
+
+def find_content_item_by_hash(
+    content_hash: str | None,
+    root: Path | None = None,
+) -> dict[str, Any] | None:
+    if content_hash in {None, ""}:
+        return None
+    _validate_string("content_hash", content_hash)
+
+    for item in list_content_items(root=root):
+        if item["content_hash"] == content_hash:
+            LOGGER.info("Found existing content item by hash: %s", item["id"])
+            return item
+    return None
 
 
 def create_queue_entry(doc_id: str, priority: float, status: str) -> dict[str, Any]:
@@ -588,8 +617,12 @@ def _read_json(path: Path) -> Any:
     if not path.exists():
         LOGGER.error("Missing JSON file: %s", path)
         raise FileNotFoundError(path)
-    with path.open("r", encoding="utf-8") as handle:
-        return json.load(handle)
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            return json.load(handle)
+    except json.JSONDecodeError as exc:
+        LOGGER.error("Invalid JSON file: %s", path)
+        raise StorageError(f"invalid JSON file: {path}") from exc
 
 
 def _write_json(path: Path, data: Any) -> None:

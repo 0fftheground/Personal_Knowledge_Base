@@ -26,7 +26,8 @@ Build a personal system that:
 
 * Input: user-added content (PDF, repo, article)
 * Flow:
-  external raw store → record → directly into learning
+  external raw store → record → candidate → user decision → learning
+  or external raw store → record → accepted → learning (only with explicit ingest override)
 
 ---
 
@@ -43,8 +44,8 @@ Each content item must have one of:
 
 Rules:
 
-* auto → starts as candidate
-* manual → starts as accepted
+* all content starts as candidate by default
+* content starts as accepted only when the user explicitly requests acceptance during ingest
 
 ---
 

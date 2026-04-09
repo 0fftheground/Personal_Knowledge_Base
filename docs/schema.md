@@ -29,7 +29,6 @@
 "id": "string",
 "summary": "string",
 "key_points": ["..."],
-"relevance": "string",
 "recommendation": "skip | skim | learn",
 "reason": "string"
 }

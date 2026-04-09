@@ -1,158 +1,155 @@
-"""Minimal learning helpers used by the CLI layer."""
+"""Learning helpers for the Codex-driven workflow."""
 
 from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Any
 
 from scripts import storage
 
 
 LOGGER = logging.getLogger(__name__)
+LEARNING_LIST_ORDER = {"doing": 0, "todo": 1, "done": 2, "none": 3}
 
 
-def view_queue(root: Path | None = None) -> list[dict[str, object]]:
-    return storage.read_queue(root)
+def view_queue(root: Path | None = None) -> list[dict[str, Any]]:
+    return sync_queue(root)
 
 
-def start_learning(doc_id: str, root: Path | None = None) -> dict[str, object]:
-    item = storage.read_content_item_by_id(doc_id, root)
-    if item["status"] not in {"accepted", "learning"}:
-        raise ValueError(f"item must be accepted before learning starts: {doc_id}")
-    if storage.learning_state_exists(doc_id, root):
-        raise ValueError(f"learning state already exists for {doc_id}; use resume")
-    return _process_next_chunk(item, initialize=True, root=root)
-
-
-def resume_learning(doc_id: str, root: Path | None = None) -> dict[str, object]:
-    item = storage.read_content_item_by_id(doc_id, root)
-    if not storage.learning_state_exists(doc_id, root):
-        raise FileNotFoundError(f"learning state not found for {doc_id}")
-    return _process_next_chunk(item, initialize=False, root=root)
-
-
-def learn_next(root: Path | None = None) -> dict[str, object]:
+def sync_queue(root: Path | None = None) -> list[dict[str, Any]]:
     base = root or storage.get_repo_root()
-    for entry in storage.read_queue(base):
-        item = storage.read_content_item_by_id(entry["doc_id"], base)
-        if item["status"] == "done":
+    current_queue = storage.read_queue(base)
+    items_by_id = {item["id"]: item for item in storage.list_content_items(root=base)}
+    normalized_entries: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+
+    for entry in current_queue:
+        item = items_by_id.get(entry["doc_id"])
+        if item is None:
+            LOGGER.warning("Dropping queue entry for missing content item: %s", entry["doc_id"])
             continue
-        if storage.learning_state_exists(item["id"], base):
-            return _process_next_chunk(item, initialize=False, root=base)
-        if item["status"] == "accepted":
-            return _process_next_chunk(item, initialize=True, root=base)
+        normalized_entry = _desired_queue_entry(item, base)
+        if normalized_entry is None:
+            LOGGER.info("Removing queue entry for non-learning item: %s", item["id"])
+            continue
+        normalized_entries.append(normalized_entry)
+        seen_ids.add(item["id"])
+
+    for item in sorted(items_by_id.values(), key=lambda current_item: current_item["id"]):
+        if item["id"] in seen_ids:
+            continue
+        normalized_entry = _desired_queue_entry(item, base)
+        if normalized_entry is None:
+            continue
+        LOGGER.info("Rebuilding missing queue entry for item: %s", item["id"])
+        normalized_entries.append(normalized_entry)
+
+    storage.write_queue(normalized_entries, base)
+    return storage.read_queue(base)
+
+
+def get_next_learning_target(root: Path | None = None) -> dict[str, Any]:
+    base = root or storage.get_repo_root()
+    queue = sync_queue(base)
+
+    for entry in queue:
+        if entry["status"] == "done":
+            continue
+        item = storage.read_content_item_by_id(entry["doc_id"], base)
+        mode = _next_learning_mode(item, base)
+        LOGGER.info("Selected next queue item %s in mode %s", item["id"], mode)
+        return {
+            "item": item,
+            "queue_entry": entry,
+            "mode": mode,
+        }
+
     raise ValueError("no accepted or learning items available in queue")
 
 
-def read_status(doc_id: str, root: Path | None = None) -> dict[str, object]:
-    item = storage.read_content_item_by_id(doc_id, root)
-    state = storage.read_learning_state(doc_id, root) if storage.learning_state_exists(doc_id, root) else None
+def list_learning_items(root: Path | None = None) -> list[dict[str, Any]]:
+    base = root or storage.get_repo_root()
+    queue = sync_queue(base)
+    queue_entries = {entry["doc_id"]: entry for entry in queue}
+    rows: list[dict[str, Any]] = []
+
+    for item in storage.list_content_items(root=base):
+        if item["status"] not in {"accepted", "learning", "done"}:
+            continue
+        state = storage.read_learning_state(item["id"], base) if storage.learning_state_exists(item["id"], base) else None
+        queue_entry = queue_entries.get(item["id"])
+        rows.append(
+            {
+                "item": item,
+                "state": state,
+                "queue_entry": queue_entry,
+                "next_action": describe_next_action(item, state),
+            }
+        )
+
+    return sorted(
+        rows,
+        key=lambda row: (
+            LEARNING_LIST_ORDER.get(
+                "none" if row["queue_entry"] is None else row["queue_entry"]["status"],
+                99,
+            ),
+            -row["item"]["priority"],
+            row["item"]["title"].lower(),
+        ),
+    )
+
+
+def read_status(doc_id: str, root: Path | None = None) -> dict[str, Any]:
+    base = root or storage.get_repo_root()
+    sync_queue(base)
+    item = storage.read_content_item_by_id(doc_id, base)
+    state = storage.read_learning_state(doc_id, base) if storage.learning_state_exists(doc_id, base) else None
+    queue_entry = storage.get_queue_entry(doc_id, base)
     return {
         "item": item,
         "state": state,
+        "queue_entry": queue_entry,
         "open_questions": [] if state is None else list(state["questions"]),
-        "next_action": _status_next_action(item, state),
+        "next_action": describe_next_action(item, state),
     }
 
 
-def _process_next_chunk(
-    item: dict[str, object],
-    *,
-    initialize: bool,
-    root: Path | None = None,
-) -> dict[str, object]:
-    base = root or storage.get_repo_root()
-    text = storage.read_raw_text_for_item(item, base)
-    chunks = _chunk_text(text)
+def _desired_queue_entry(item: dict[str, Any], root: Path) -> dict[str, Any] | None:
+    state = storage.read_learning_state(item["id"], root) if storage.learning_state_exists(item["id"], root) else None
 
-    if initialize:
-        state = storage.create_learning_state(
-            doc_id=item["id"],
-            progress=0.0,
-            current_chunk=0,
-            chunks_total=len(chunks),
-            key_points=[],
-            questions=[],
-            next_action=_next_action(0, len(chunks)),
-            status="learning",
-        )
-    else:
-        state = storage.read_learning_state(item["id"], base)
-
-    if state["current_chunk"] >= state["chunks_total"]:
-        state["progress"] = 1.0
-        state["status"] = "done"
-        state["next_action"] = "Learning complete"
-        storage.write_learning_state(state, base)
-        item["status"] = "done"
-        storage.write_content_item(item, base)
-        storage.upsert_queue_entry(
-            storage.create_queue_entry(item["id"], item["priority"], "done"),
-            base,
-        )
-        _write_outputs(item, state, base)
-        LOGGER.info("Learning already complete for %s", item["id"])
-        return {"item": item, "state": state}
-
-    chunk_index = state["current_chunk"]
-    chunk = chunks[chunk_index]
-    key_point = _extract_key_point(chunk)
-    question = f"What should I verify from chunk {chunk_index + 1} of {item['title']}?"
-
-    state["key_points"].append(key_point)
-    state["questions"].append(question)
-    state["current_chunk"] += 1
-    state["progress"] = round(state["current_chunk"] / state["chunks_total"], 3)
-    state["status"] = "done" if state["current_chunk"] == state["chunks_total"] else "learning"
-    state["next_action"] = _next_action(state["current_chunk"], state["chunks_total"])
-
-    item["status"] = "done" if state["status"] == "done" else "learning"
-    queue_status = "done" if state["status"] == "done" else "doing"
-
-    storage.write_learning_state(state, base)
-    storage.write_content_item(item, base)
-    storage.upsert_queue_entry(
-        storage.create_queue_entry(item["id"], item["priority"], queue_status),
-        base,
-    )
-    _write_outputs(item, state, base)
-
-    LOGGER.info(
-        "Processed chunk %s/%s for %s",
-        state["current_chunk"],
-        state["chunks_total"],
-        item["id"],
-    )
-    return {"item": item, "state": state}
+    if item["status"] in {"candidate", "rejected", "archived"}:
+        return None
+    if item["status"] == "done" or (state is not None and state["status"] == "done"):
+        return storage.create_queue_entry(item["id"], item["priority"], "done")
+    if item["status"] == "learning" or state is not None:
+        return storage.create_queue_entry(item["id"], item["priority"], "doing")
+    if item["status"] == "accepted":
+        return storage.create_queue_entry(item["id"], item["priority"], "todo")
+    return None
 
 
-def _chunk_text(text: str) -> list[str]:
-    chunks = [part.strip() for part in text.split("\n\n") if part.strip()]
-    if chunks:
-        return chunks
-    stripped = text.strip()
-    return [stripped] if stripped else ["Empty content."]
+def _next_learning_mode(item: dict[str, Any], root: Path) -> str:
+    if not storage.learning_state_exists(item["id"], root):
+        return "outline"
+
+    state = storage.read_learning_state(item["id"], root)
+    if not state["outline_generated"]:
+        return "outline"
+    return "deep_dive"
 
 
-def _extract_key_point(chunk: str) -> str:
-    line = chunk.splitlines()[0].strip().lstrip("#- ").strip()
-    return line or "Empty chunk."
-
-
-def _next_action(current_chunk: int, chunks_total: int) -> str:
-    if current_chunk >= chunks_total:
-        return "Learning complete"
-    return f"Process chunk {current_chunk + 1} of {chunks_total}"
-
-
-def _status_next_action(
-    item: dict[str, object],
-    state: dict[str, object] | None,
+def describe_next_action(
+    item: dict[str, Any],
+    state: dict[str, Any] | None,
 ) -> str:
     if state is not None:
         if not state["outline_generated"]:
             return f"Run pkls learn prompt --id {item['id']} --mode outline"
-        return str(state["next_action"])
+        if state["status"] == "done":
+            return "Review generated learning outputs"
+        return f"Run pkls learn prompt --id {item['id']} --mode deep_dive"
     if item["status"] == "accepted":
         return f"Run pkls learn prompt --id {item['id']} --mode outline"
     if item["status"] == "candidate":
@@ -163,43 +160,4 @@ def _status_next_action(
         return "Item is archived"
     if item["status"] == "done":
         return "Review generated learning outputs"
-    return "Resume learning"
-
-
-def _write_outputs(item: dict[str, object], state: dict[str, object], root: Path) -> None:
-    output_dir = storage.get_learning_outputs_root(root) / item["id"]
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    if state["outline_generated"] or state["document_outline"] or state["core_summary"]:
-        outline = (
-            f"# Outline for {item['title']}\n\n"
-            "## Core Summary\n\n"
-            f"{state['core_summary'] or 'Outline not generated yet.'}\n\n"
-            "## Document Outline\n\n"
-            + ("\n".join(f"- {point}" for point in state["document_outline"]) or "- Outline not generated yet.")
-            + "\n"
-        )
-        (output_dir / "outline.md").write_text(outline, encoding="utf-8")
-
-    summary = (
-        f"# {item['title']}\n\n"
-        f"- progress: {state['progress']}\n"
-        f"- status: {state['status']}\n\n"
-        "## Key Points\n\n"
-        + "\n".join(f"- {point}" for point in state["key_points"])
-        + "\n"
-    )
-    insights = (
-        f"# Insights for {item['title']}\n\n"
-        + "\n".join(f"- Review: {point}" for point in state["key_points"])
-        + "\n"
-    )
-    qa = (
-        f"# Questions for {item['title']}\n\n"
-        + "\n".join(f"- {question}" for question in state["questions"])
-        + "\n"
-    )
-
-    (output_dir / "summary.md").write_text(summary, encoding="utf-8")
-    (output_dir / "insights.md").write_text(insights, encoding="utf-8")
-    (output_dir / "qa.md").write_text(qa, encoding="utf-8")
+    return "Resume learning in Codex"

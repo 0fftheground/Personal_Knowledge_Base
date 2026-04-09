@@ -9,14 +9,19 @@ from datetime import date
 from pathlib import Path
 
 from scripts import codex_workflow
+from scripts import ingest_detection
 from scripts import learning
 from scripts import local_config
 from scripts import publish
 from scripts import storage
 from scripts import triage
+from scripts import url_ingest
 
 
 LOGGER = logging.getLogger(__name__)
+TEXT_PREVIEW_LIMIT = 220
+READ_ONLY_LOG_LEVEL = logging.WARNING
+MUTATING_LOG_LEVEL = logging.INFO
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -29,7 +34,8 @@ def build_parser() -> argparse.ArgumentParser:
         source_parser = add_subparsers.add_parser(source_type)
         source_parser.add_argument("--type", dest="content_type", required=True, choices=sorted(storage.CONTENT_TYPES))
         source_parser.add_argument("--path", required=True)
-        source_parser.add_argument("--title", required=True)
+        source_parser.add_argument("--title")
+        source_parser.add_argument("--accept", action="store_true")
 
     raw_parser = subparsers.add_parser("raw")
     raw_subparsers = raw_parser.add_subparsers(dest="raw_command", required=True)
@@ -39,7 +45,8 @@ def build_parser() -> argparse.ArgumentParser:
         source_parser = inbox_add_subparsers.add_parser(source_type)
         source_parser.add_argument("--type", dest="content_type", required=True, choices=sorted(storage.CONTENT_TYPES))
         source_parser.add_argument("--path", required=True)
-        source_parser.add_argument("--title", required=True)
+        source_parser.add_argument("--title")
+        source_parser.add_argument("--accept", action="store_true")
     promote_parser = raw_subparsers.add_parser("promote")
     promote_parser.add_argument("--id", required=True)
     sync_parser = raw_subparsers.add_parser("sync")
@@ -47,10 +54,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     triage_parser = subparsers.add_parser("triage")
     triage_subparsers = triage_parser.add_subparsers(dest="triage_command", required=True)
-    triage_subparsers.add_parser("run")
     triage_subparsers.add_parser("list")
     prompt_parser = triage_subparsers.add_parser("prompt")
     prompt_parser.add_argument("--id", required=True)
+    prompt_batch_parser = triage_subparsers.add_parser("prompt-batch")
+    prompt_batch_parser.add_argument("--limit", type=int, default=5)
     for action in ("accept", "reject", "later"):
         action_parser = triage_subparsers.add_parser(action)
         action_parser.add_argument("--id", required=True)
@@ -58,15 +66,13 @@ def build_parser() -> argparse.ArgumentParser:
     learn_parser = subparsers.add_parser("learn")
     learn_subparsers = learn_parser.add_subparsers(dest="learn_command", required=True)
     learn_subparsers.add_parser("queue")
+    learn_subparsers.add_parser("list")
     next_parser = learn_subparsers.add_parser("next")
-    next_parser.set_defaults(id=None)
+    next_parser.add_argument("--focus")
     learn_prompt_parser = learn_subparsers.add_parser("prompt")
     learn_prompt_parser.add_argument("--id", required=True)
     learn_prompt_parser.add_argument("--mode", required=True, choices=["outline", "deep_dive"])
     learn_prompt_parser.add_argument("--focus")
-    for action in ("start", "resume"):
-        action_parser = learn_subparsers.add_parser(action)
-        action_parser.add_argument("--id", required=True)
 
     status_parser = subparsers.add_parser("status")
     status_parser.add_argument("--id", required=True)
@@ -95,16 +101,16 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     parser = build_parser()
     args = parser.parse_args(argv)
+    logging.basicConfig(level=_default_log_level(args), format="%(levelname)s %(message)s")
     root = storage.get_repo_root()
 
     try:
         if args.command != "config":
             storage.ensure_storage_layout(root)
         if args.command == "add":
-            _handle_add(args.source_type, args.content_type, args.path, args.title, root)
+            _handle_add(args.source_type, args.content_type, args.path, args.title, args.accept, root)
         elif args.command == "triage":
             _handle_triage(args, root)
         elif args.command == "learn":
@@ -123,22 +129,74 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
 
+def _default_log_level(args: argparse.Namespace) -> int:
+    if args.command == "triage" and args.triage_command in {"list", "prompt", "prompt-batch"}:
+        return READ_ONLY_LOG_LEVEL
+    if args.command == "learn" and args.learn_command in {"queue", "list", "next", "prompt"}:
+        return READ_ONLY_LOG_LEVEL
+    if args.command == "status":
+        return READ_ONLY_LOG_LEVEL
+    if args.command == "config" and args.config_command == "show":
+        return READ_ONLY_LOG_LEVEL
+    return MUTATING_LOG_LEVEL
+
+
 def _handle_add(
     source_type: str,
     content_type: str,
     source_path: str,
-    title: str,
+    title: str | None,
+    accept_mode: bool,
     root: Path,
 ) -> None:
     source_file = Path(source_path).expanduser().resolve()
-    doc_id = storage.build_doc_id(title, source_type, root)
+    plan = ingest_detection.build_ingest_plan(
+        source_type=source_type,
+        content_type=content_type,
+        source_path=source_file,
+        explicit_title=title,
+        explicit_accept=accept_mode,
+    )
+
+    if plan.is_url_list:
+        result = url_ingest.ingest_url_list(
+            source_type=source_type,
+            content_type=content_type,
+            url_list_path=source_file,
+            initial_status=plan.initial_status,
+            root=root,
+        )
+        print(f"added {source_type} url items: {len(result['added_items'])}")
+        print(f"detected_input: url_list")
+        print(f"detected_status: {plan.initial_status}")
+        print(f"detection_reason: {plan.detection_reason}")
+        for item in result["added_items"]:
+            print(f"{item['id']} | {item['title']} | status={item['status']}")
+        if result["duplicate_items"]:
+            print(f"duplicate urls: {len(result['duplicate_items'])}")
+            for item in result["duplicate_items"]:
+                print(f"{item['id']} | {item['title']} | existing")
+        if result["failures"]:
+            print(f"failed urls: {len(result['failures'])}")
+            for failure in result["failures"]:
+                print(f"{failure['url']} | {failure['error']}")
+        return
+
+    content_hash = storage.compute_file_hash(source_file)
+    existing_item = storage.find_content_item_by_hash(content_hash, root)
+    if existing_item is not None:
+        print(f"duplicate item: {existing_item['id']}")
+        print(f"title: {existing_item['title']}")
+        print(f"status: {existing_item['status']}")
+        return
+    doc_id = storage.build_doc_id(plan.title, source_type, root)
     stored_file_info = storage.ingest_raw_file(doc_id, source_type, source_file, root)
-    status = "accepted" if source_type == "manual" else "candidate"
-    recommendation = "learn" if source_type == "manual" else "skim"
+    status = plan.initial_status
+    recommendation = "learn" if status == "accepted" else "skim"
 
     item = storage.create_content_item(
         doc_id=doc_id,
-        title=title,
+        title=plan.title,
         source_type=source_type,
         content_type=content_type,
         ingest_date=date.today().isoformat(),
@@ -156,19 +214,22 @@ def _handle_add(
     )
     storage.write_content_item(item, root)
 
-    if source_type == "manual":
+    if status == "accepted":
         storage.upsert_queue_entry(storage.create_queue_entry(doc_id, item["priority"], "todo"), root)
 
     print(f"added {source_type} item: {doc_id}")
     print(f"storage_tier: {item['storage_tier']}")
     print(f"full_raw_relpath: {item['full_raw_relpath']}")
     print(f"sync_raw_relpath: {item['sync_raw_relpath']}")
+    print(f"detected_input: {'url_list' if plan.is_url_list else 'file'}")
+    print(f"detected_status: {plan.initial_status}")
+    print(f"detection_reason: {plan.detection_reason}")
     print(f"status: {status}")
 
 
 def _handle_raw(args: argparse.Namespace, root: Path) -> None:
     if args.raw_command == "inbox-add":
-        _handle_raw_inbox_add(args.source_type, args.content_type, args.path, args.title, root)
+        _handle_raw_inbox_add(args.source_type, args.content_type, args.path, args.title, args.accept, root)
         return
 
     if args.raw_command == "promote":
@@ -186,18 +247,35 @@ def _handle_raw_inbox_add(
     source_type: str,
     content_type: str,
     source_path: str,
-    title: str,
+    title: str | None,
+    accept_mode: bool,
     root: Path,
 ) -> None:
     source_file = Path(source_path).expanduser().resolve()
-    doc_id = storage.build_doc_id(title, source_type, root)
+    plan = ingest_detection.build_ingest_plan(
+        source_type=source_type,
+        content_type=content_type,
+        source_path=source_file,
+        explicit_title=title,
+        explicit_accept=accept_mode,
+    )
+    if plan.is_url_list:
+        raise ValueError("raw inbox-add does not support URL list inputs; use pkls add instead")
+    content_hash = storage.compute_file_hash(source_file)
+    existing_item = storage.find_content_item_by_hash(content_hash, root)
+    if existing_item is not None:
+        print(f"duplicate item: {existing_item['id']}")
+        print(f"title: {existing_item['title']}")
+        print(f"status: {existing_item['status']}")
+        return
+    doc_id = storage.build_doc_id(plan.title, source_type, root)
     stored_file_info = storage.ingest_raw_file_to_inbox(doc_id, source_type, source_file, root)
-    status = "accepted" if source_type == "manual" else "candidate"
-    recommendation = "learn" if source_type == "manual" else "skim"
+    status = plan.initial_status
+    recommendation = "learn" if status == "accepted" else "skim"
 
     item = storage.create_content_item(
         doc_id=doc_id,
-        title=title,
+        title=plan.title,
         source_type=source_type,
         content_type=content_type,
         ingest_date=date.today().isoformat(),
@@ -215,32 +293,32 @@ def _handle_raw_inbox_add(
     )
     storage.write_content_item(item, root)
 
-    if source_type == "manual":
+    if status == "accepted":
         storage.upsert_queue_entry(storage.create_queue_entry(doc_id, item["priority"], "todo"), root)
 
     print(f"added inbox {source_type} item: {doc_id}")
     print(f"sync_raw_relpath: {item['sync_raw_relpath']}")
     print(f"sync_status: {item['sync_status']}")
+    print(f"detected_status: {plan.initial_status}")
+    print(f"detection_reason: {plan.detection_reason}")
     print(f"status: {status}")
 
 
 def _handle_triage(args: argparse.Namespace, root: Path) -> None:
-    if args.triage_command == "run":
-        processed_ids = triage.run_triage(root)
-        print(f"triaged items: {len(processed_ids)}")
-        for doc_id in processed_ids:
-            print(doc_id)
-        return
+    publish.sync_complete_triage_cards(root)
 
     if args.triage_command == "list":
-        candidates = triage.list_candidates(root)
-        print(f"candidates: {len(candidates)}")
-        for item in candidates:
-            print(f"{item['id']} | {item['title']} | priority={item['priority']} | recommendation={item['ai_recommendation']}")
+        rows = triage.list_candidate_reviews(root)
+        _print_triage_rows(rows)
         return
 
     if args.triage_command == "prompt":
-        print(codex_workflow.build_triage_prompt(args.id, root))
+        prompt_path = codex_workflow.write_triage_prompt(args.id, root)
+        print(f"saved triage prompt: {prompt_path}")
+        return
+
+    if args.triage_command == "prompt-batch":
+        _handle_triage_prompt_batch(args.limit, root)
         return
 
     if args.triage_command == "accept":
@@ -259,34 +337,30 @@ def _handle_triage(args: argparse.Namespace, root: Path) -> None:
 
 def _handle_learn(args: argparse.Namespace, root: Path) -> None:
     if args.learn_command == "queue":
-        queue = learning.view_queue(root)
-        print(f"queue items: {len(queue)}")
-        for entry in queue:
-            print(f"{entry['doc_id']} | priority={entry['priority']} | status={entry['status']}")
+        rows = learning.list_learning_items(root)
+        _print_learning_rows(rows)
         return
 
-    if args.learn_command == "start":
-        result = learning.start_learning(args.id, root)
-        print(_learning_summary(result))
+    if args.learn_command == "list":
+        rows = learning.list_learning_items(root)
+        _print_learning_rows(rows)
+        return
+
+    if args.learn_command == "next":
+        target = learning.get_next_learning_target(root)
+        print(codex_workflow.build_learning_prompt(target["item"]["id"], target["mode"], args.focus, root))
         return
 
     if args.learn_command == "prompt":
         print(codex_workflow.build_learning_prompt(args.id, args.mode, args.focus, root))
         return
 
-    if args.learn_command == "resume":
-        result = learning.resume_learning(args.id, root)
-        print(_learning_summary(result))
-        return
-
-    result = learning.learn_next(root)
-    print(_learning_summary(result))
-
 
 def _handle_status(doc_id: str, root: Path) -> None:
     result = learning.read_status(doc_id, root)
     item = result["item"]
     state = result["state"]
+    queue_entry = result["queue_entry"]
     open_questions = result["open_questions"]
     next_action = result["next_action"]
 
@@ -305,6 +379,7 @@ def _handle_status(doc_id: str, root: Path) -> None:
     print(f"source_filename: {item['source_filename']}")
     print(f"source_device: {item['source_device']}")
     print(f"sync_status: {item['sync_status']}")
+    print(f"queue_status: {queue_entry['status'] if queue_entry is not None else 'none'}")
 
     if state is None:
         print("learning_progress: not_started")
@@ -321,6 +396,108 @@ def _handle_status(doc_id: str, root: Path) -> None:
     else:
         print("- none")
     print(f"next_action: {next_action}")
+
+
+def _print_triage_rows(rows: list[dict[str, object]]) -> None:
+    ready_rows = [row for row in rows if row["triage_card"] is not None]
+    pending_rows = [row for row in rows if row["triage_card"] is None]
+
+    print(f"candidates: {len(rows)}")
+    print("")
+    _print_triage_group("ready_for_decision", ready_rows)
+    print("")
+    _print_triage_group("needs_triage_card", pending_rows)
+
+
+def _print_triage_group(label: str, rows: list[dict[str, object]]) -> None:
+    print(f"{label}: {len(rows)}")
+    if not rows:
+        print("  - none")
+        return
+
+    for row in rows:
+        item = row["item"]
+        triage_card = row["triage_card"]
+        recommendation = item["ai_recommendation"]
+        summary = "none"
+        reason = ""
+        if triage_card is not None:
+            recommendation = triage_card["recommendation"] or recommendation
+            summary = triage_card["summary"] or "none"
+            reason = triage_card["reason"]
+        print(f"- {item['id']}")
+        print(f"  title: {item['title']}")
+        print(f"  source_type: {item['source_type']}")
+        print(f"  priority: {item['priority']}")
+        print(f"  recommendation: {recommendation}")
+        print(f"  decision: {item['manual_decision']}")
+        print(f"  summary: {_preview_text(summary)}")
+        if reason:
+            print(f"  reason: {_preview_text(reason)}")
+        if triage_card is None:
+            print(f"  next_action: python -m scripts.pkls triage prompt --id {item['id']}")
+        print("")
+
+
+def _print_learning_rows(rows: list[dict[str, object]]) -> None:
+    groups = {"doing": [], "todo": [], "done": [], "none": []}
+    for row in rows:
+        queue_entry = row["queue_entry"]
+        status = "none" if queue_entry is None else queue_entry["status"]
+        groups[status].append(row)
+
+    print(f"learning items: {len(rows)}")
+    non_empty_labels = [label for label in ("doing", "todo", "done", "none") if groups[label]]
+    if not non_empty_labels:
+        print("")
+        print("  - none")
+        return
+
+    print("")
+    for index, label in enumerate(non_empty_labels):
+        _print_learning_group(label, groups[label])
+        if index < len(non_empty_labels) - 1:
+            print("")
+
+
+def _handle_triage_prompt_batch(limit: int, root: Path) -> None:
+    if limit <= 0:
+        raise ValueError("prompt-batch --limit must be greater than 0")
+
+    rows = triage.list_candidates_needing_triage_card(limit, root)
+    if not rows:
+        print("no candidate items need triage cards")
+        return
+
+    prompt_path, selected_ids, total_pending = codex_workflow.write_triage_batch_prompt(limit, root)
+    print(f"saved triage batch prompt: {prompt_path}")
+    print(f"selected_items: {len(selected_ids)}/{total_pending}")
+    for doc_id in selected_ids:
+        print(doc_id)
+
+
+def _print_learning_group(label: str, rows: list[dict[str, object]]) -> None:
+    print(f"{label}: {len(rows)}")
+    for index, row in enumerate(rows):
+        item = row["item"]
+        state = row["state"]
+        progress = "not_started" if state is None else f"{state['progress']:.2f}"
+        chunk_progress = "0/0" if state is None else f"{state['current_chunk']}/{state['chunks_total']}"
+        print(f"- {item['id']}")
+        print(f"  title: {item['title']}")
+        print(f"  item_status: {item['status']}")
+        print(f"  progress: {progress}")
+        print(f"  chunks: {chunk_progress}")
+        print(f"  next_action: {row['next_action']}")
+        if index < len(rows) - 1:
+            print("")
+
+
+def _preview_text(text: str) -> str:
+    compact = " ".join(text.split())
+    if len(compact) <= TEXT_PREVIEW_LIMIT:
+        return compact
+    return f"{compact[:TEXT_PREVIEW_LIMIT - 3]}..."
 
 
 def _handle_config(args: argparse.Namespace, root: Path) -> None:
@@ -395,19 +572,6 @@ def _handle_publish(args: argparse.Namespace, root: Path) -> None:
     print(f"published files: {len(target_paths)}")
     for path in target_paths:
         print(path)
-
-
-def _learning_summary(result: dict[str, object]) -> str:
-    item = result["item"]
-    state = result["state"]
-    return (
-        f"learning item: {item['id']}\n"
-        f"status: {item['status']}\n"
-        f"progress: {state['progress']}\n"
-        f"current_chunk: {state['current_chunk']}/{state['chunks_total']}\n"
-        f"next_action: {state['next_action']}"
-    )
-
 
 if __name__ == "__main__":
     sys.exit(main())

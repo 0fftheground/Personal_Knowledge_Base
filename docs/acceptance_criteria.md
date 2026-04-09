@@ -19,7 +19,7 @@
 
 ## Triage
 
-* Each auto record produces:
+* Each candidate record produces:
 
   * summary
   * key points
@@ -70,8 +70,8 @@ Each document must generate:
 
 ## Manual vs Auto
 
-* manual → directly accepted
-* auto → must go through candidate
+* all content defaults to candidate
+* explicit `--accept` starts content as accepted
 
 ---
 

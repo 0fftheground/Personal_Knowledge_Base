@@ -57,9 +57,14 @@ Then:
 
 1. Configure local paths with `python -m scripts.pkls config ...`
 2. Add content with `python -m scripts.pkls add ...`
-3. Generate Codex prompts for triage or learning
-4. Let Codex update cards, state, and outputs
-5. Publish readable outputs to Obsidian
+   The CLI now auto-detects URL-list input, derives titles when omitted, defaults all ingest to candidate, supports explicit `--accept`, and skips duplicate imports
+3. Use `python -m scripts.pkls triage list` to review candidate material
+4. Use `python -m scripts.pkls learn queue` or `python -m scripts.pkls learn list` to inspect learning progress
+5. Use `python -m scripts.pkls triage prompt ...` or `python -m scripts.pkls learn next`
+   / `python -m scripts.pkls learn prompt ...` to generate Codex prompts
+   Triage prompts are saved under `<workspace_root>/triage/prompts/`, and complete triage cards are synced to Obsidian through the triage workflow
+6. Let Codex update cards, state, and outputs
+7. Publish readable outputs to Obsidian
 
 Primary usage guide:
 
@@ -99,7 +104,7 @@ MVP in development:
 * workspace-based state storage
 * external raw full/sync stores
 * Codex-assisted triage
-* Codex-assisted learning
+* queue-synced Codex-assisted learning
 * Obsidian publish path configuration
 
 ## Local Config

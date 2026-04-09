@@ -68,6 +68,7 @@ knowledge-system/
 * triage/
 
   * cards/
+  * prompts/
 
 * learning/
 

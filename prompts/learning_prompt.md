@@ -19,6 +19,7 @@ Then read:
 
 * the item's metadata.json
 * the raw content file
+* learning/queue.json
 * learning/states/<doc_id>/state.json if it exists
 * learning/outputs/<doc_id>/outline.md if it exists
 
@@ -38,11 +39,14 @@ Goal:
 
 You must:
 
+* update records/<source_type>/<doc_id>/metadata.json
 * create or update learning/states/<doc_id>/state.json
+* update learning/queue.json
 * set `outline_generated = true`
 * write `document_outline`
 * write `core_summary`
 * keep learning status resumable
+* set the item status to `learning` unless the document is already done
 * write learning/outputs/<doc_id>/outline.md
 
 The outline should:
@@ -70,6 +74,8 @@ You must:
 * append key points
 * append questions
 * update progress, current_chunk, and next_action
+* update records/<source_type>/<doc_id>/metadata.json so item status matches learning progress
+* update learning/queue.json so queue status matches learning progress
 * update summary.md, insights.md, and qa.md
 
 If the user provides a focus request, bias the explanation and questions toward
