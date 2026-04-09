@@ -1,0 +1,12 @@
+[
+  {
+    "doc_id": "manual-stateful-learning-workflow",
+    "priority": 1.0,
+    "status": "doing"
+  },
+  {
+    "doc_id": "auto-agent-evaluation-workflow-notes",
+    "priority": 0.5,
+    "status": "todo"
+  }
+]
