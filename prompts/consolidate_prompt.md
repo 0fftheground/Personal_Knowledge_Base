@@ -2,7 +2,7 @@
 
 You are adapting learned material into the user's Obsidian knowledge system.
 
-Your job is not to repeat the source summary. Your job is to convert what has been learned into a durable note draft that fits the user's existing note structure.
+Your job is to convert what has been learned into a durable note draft that fits the user's existing note structure. Do not restate the source summary.
 
 ## Read First
 
@@ -20,6 +20,8 @@ Then read the execution-context files provided in the generated prompt.
 * identify how this material should fit into the current knowledge base
 * decide whether to create a new note, update an existing note, or create-and-link
 * produce an Obsidian-ready draft
+
+Use this prompt only after enough learning has accumulated or when the generated execution context explicitly marks the item ready to consolidate.
 
 ## Rules
 

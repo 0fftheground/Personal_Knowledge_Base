@@ -2,6 +2,8 @@
 
 You are refining questions produced during learning.
 
+This is a later-stage review prompt, not part of the initial learn / pause / consolidate flow.
+
 ## Read
 
 Before refining, read:

@@ -1,8 +1,8 @@
 # Learning Pause Prompt
 
-You are closing or pausing an interactive learning session with an AI agent.
+You are closing or pausing an interactive learning session.
 
-Your job is to persist the useful results of the current session back into the local knowledge-system files so the work can resume later without relying on chat history.
+Your job is to persist the useful results of the current session back into local files so the work can resume later without relying on chat history.
 
 ## Read First
 
