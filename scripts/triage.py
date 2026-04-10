@@ -1,4 +1,4 @@
-"""Triage helpers for the Codex-driven workflow."""
+"""Triage helpers for the agent-driven workflow."""
 
 from __future__ import annotations
 

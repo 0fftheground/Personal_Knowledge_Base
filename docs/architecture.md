@@ -29,9 +29,9 @@ External filesystem location.
 Purpose:
 
 * store content records
-* store triage cards
-* store learning state
-* store learning outputs
+* store triage cards and prompt files
+* store learning state and intermediate outputs
+* store consolidation plans and drafts
 * store workspace-local notes fallback
 
 ### 4. Notes Layer
@@ -42,7 +42,7 @@ Purpose:
 
 * mobile reading
 * published triage and learning outputs
-* final knowledge notes
+* final knowledge notes adapted to the user's note system
 
 ---
 
@@ -75,6 +75,13 @@ knowledge-system/
   * queue.json
   * states/
   * outputs/
+  * prompts/
+
+* consolidation/
+
+  * plans/
+  * drafts/
+  * indexes/
 
 * notes/
 
@@ -106,11 +113,15 @@ The workspace stores metadata records for each content item.
 
 ### Triage Layer
 
-Stores triage markdown cards.
+Stores decision-oriented cards for candidate items.
 
 ### Learning Layer
 
-Stores learning state and outputs.
+Stores learning state, initialization outputs, focus-session outputs, and pause snapshots.
+
+### Consolidation Layer
+
+Stores plans and drafts that adapt learned material into the existing Obsidian knowledge structure.
 
 ### Notes Layer
 
@@ -128,7 +139,8 @@ Stores published reading material and long-term notes.
 ### triage
 
 * read raw content through resolved external paths
-* generate cards
+* use bounded reading only
+* generate decision cards
 * update metadata recommendation
 
 ### decision
@@ -137,13 +149,70 @@ Stores published reading material and long-term notes.
 
 ### learning
 
-* read raw content through resolved external paths
-* update state incrementally
-* generate outline and learning outputs
+* initialize accepted items with document framework and core content
+* classify material as `single_pass` or `chunked`
+* run user-controlled focus sessions
+* save pause/resume state incrementally
+
+### consolidate
+
+* read the Obsidian structure index and a small set of relevant notes
+* generate a consolidation plan
+* draft knowledge notes adapted to the user's note system
 
 ### publish
 
-* copy triage and learning outputs into Obsidian-facing directories
+* copy triage, learning, and consolidated outputs into Obsidian-facing directories
+* incrementally refresh the Obsidian index for published note files
+* remove stale published files when their workspace sources no longer exist
+
+---
+
+## Core Workflow
+
+### 1. Triage
+
+Triage is bounded and decision-oriented.
+
+It answers:
+
+* what this item is
+* whether it is worth learning
+* whether to `skip`, `skim`, or `learn`
+
+It does not perform full-document learning.
+
+### 2. Learn Initialize
+
+The first learning run creates a document-level framework and core summary.
+
+The system also decides whether the material should stay `single_pass` or move to `chunked` processing.
+
+### 3. Learn Focus
+
+The user controls the topic or question to explore.
+
+The system provides the AI agent with:
+
+* the current state
+* the document framework
+* prior summaries and insights
+* only the relevant local content for the requested focus
+
+### 4. Learn Pause
+
+When the user stops a learning session, the AI agent writes the updated state, summaries, insights, and next action so the work is resumable.
+
+### 5. Consolidate
+
+Once the user feels a topic is understood well enough, the AI agent adapts the learned material into the existing Obsidian knowledge structure.
+
+This stage reads:
+
+* the Obsidian structure index
+* a small candidate set of related notes
+
+It does not scan the full vault body on every run.
 
 ---
 
@@ -152,5 +221,8 @@ Stores published reading material and long-term notes.
 * raw files do not live in git-tracked repository state
 * workspace data does not live in git-tracked repository state
 * all learning remains reproducible from raw file + state
+* triage must stay bounded; full-document reading belongs to learning
 * each document must be independently resumable
+* learning sessions are user-controlled, not auto-advanced in the background
+* consolidation should use note structure plus selected relevant notes, not full-vault rereads
 * machine-specific paths stay in local config only

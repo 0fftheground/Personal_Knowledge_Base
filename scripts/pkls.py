@@ -8,7 +8,7 @@ import sys
 from datetime import date
 from pathlib import Path
 
-from scripts import codex_workflow
+from scripts import agent_workflow
 from scripts import ingest_detection
 from scripts import learning
 from scripts import local_config
@@ -21,7 +21,7 @@ from scripts import url_ingest
 LOGGER = logging.getLogger(__name__)
 TEXT_PREVIEW_LIMIT = 220
 READ_ONLY_LOG_LEVEL = logging.WARNING
-MUTATING_LOG_LEVEL = logging.INFO
+MUTATING_LOG_LEVEL = logging.WARNING
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -64,22 +64,25 @@ def build_parser() -> argparse.ArgumentParser:
         action_parser.add_argument("--id", required=True)
 
     learn_parser = subparsers.add_parser("learn")
-    learn_subparsers = learn_parser.add_subparsers(dest="learn_command", required=True)
+    learn_parser.add_argument("--id")
+    learn_parser.add_argument("--mode", choices=["outline", "deep_dive"])
+    learn_parser.add_argument("--focus")
+    learn_subparsers = learn_parser.add_subparsers(dest="learn_command")
     learn_subparsers.add_parser("queue")
     learn_subparsers.add_parser("list")
     next_parser = learn_subparsers.add_parser("next")
     next_parser.add_argument("--focus")
-    learn_prompt_parser = learn_subparsers.add_parser("prompt")
-    learn_prompt_parser.add_argument("--id", required=True)
-    learn_prompt_parser.add_argument("--mode", required=True, choices=["outline", "deep_dive"])
-    learn_prompt_parser.add_argument("--focus")
+    pause_parser = learn_subparsers.add_parser("pause")
+    pause_parser.add_argument("--id", required=True)
+    consolidate_parser = learn_subparsers.add_parser("consolidate")
+    consolidate_parser.add_argument("--id", required=True)
 
     status_parser = subparsers.add_parser("status")
     status_parser.add_argument("--id", required=True)
 
     publish_parser = subparsers.add_parser("publish")
     publish_subparsers = publish_parser.add_subparsers(dest="publish_command", required=True)
-    for publish_target in ("triage", "learn", "item"):
+    for publish_target in ("triage", "learn", "consolidate", "item"):
         publish_target_parser = publish_subparsers.add_parser(publish_target)
         publish_target_parser.add_argument("--id", required=True)
 
@@ -103,7 +106,11 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    logging.basicConfig(level=_default_log_level(args), format="%(levelname)s %(message)s")
+    logging.basicConfig(
+        level=_default_log_level(args),
+        format="%(levelname)s %(message)s",
+        force=True,
+    )
     root = storage.get_repo_root()
 
     try:
@@ -132,7 +139,7 @@ def main(argv: list[str] | None = None) -> int:
 def _default_log_level(args: argparse.Namespace) -> int:
     if args.command == "triage" and args.triage_command in {"list", "prompt", "prompt-batch"}:
         return READ_ONLY_LOG_LEVEL
-    if args.command == "learn" and args.learn_command in {"queue", "list", "next", "prompt"}:
+    if args.command == "learn":
         return READ_ONLY_LOG_LEVEL
     if args.command == "status":
         return READ_ONLY_LOG_LEVEL
@@ -313,7 +320,7 @@ def _handle_triage(args: argparse.Namespace, root: Path) -> None:
         return
 
     if args.triage_command == "prompt":
-        prompt_path = codex_workflow.write_triage_prompt(args.id, root)
+        prompt_path = agent_workflow.write_triage_prompt(args.id, root)
         print(f"saved triage prompt: {prompt_path}")
         return
 
@@ -348,12 +355,38 @@ def _handle_learn(args: argparse.Namespace, root: Path) -> None:
 
     if args.learn_command == "next":
         target = learning.get_next_learning_target(root)
-        print(codex_workflow.build_learning_prompt(target["item"]["id"], target["mode"], args.focus, root))
+        prompt_path = agent_workflow.write_learning_prompt(
+            target["item"]["id"],
+            target["mode"],
+            args.focus,
+            root,
+        )
+        print(f"saved learning prompt: {prompt_path}")
+        print(f"doc_id: {target['item']['id']}")
+        print(f"mode: {target['mode']}")
         return
 
-    if args.learn_command == "prompt":
-        print(codex_workflow.build_learning_prompt(args.id, args.mode, args.focus, root))
+    if args.learn_command == "pause":
+        prompt_path = agent_workflow.write_pause_prompt(args.id, root)
+        print(f"saved learning pause prompt: {prompt_path}")
+        print(f"doc_id: {args.id}")
         return
+
+    if args.learn_command == "consolidate":
+        prompt_path = agent_workflow.write_consolidate_prompt(args.id, root)
+        print(f"saved consolidation prompt: {prompt_path}")
+        print(f"doc_id: {args.id}")
+        return
+
+    if args.id is not None:
+        mode = args.mode or learning.resolve_learning_mode(args.id, root)
+        prompt_path = agent_workflow.write_learning_prompt(args.id, mode, args.focus, root)
+        print(f"saved learning prompt: {prompt_path}")
+        print(f"doc_id: {args.id}")
+        print(f"mode: {mode}")
+        return
+
+    raise ValueError("learn requires queue, list, next, pause, consolidate, or --id")
 
 
 def _handle_status(doc_id: str, root: Path) -> None:
@@ -385,9 +418,15 @@ def _handle_status(doc_id: str, root: Path) -> None:
         print("learning_progress: not_started")
         print("current_chunk: 0/0")
     else:
+        print(f"initialized: {state['initialized']}")
+        print(f"processing_mode: {state['processing_mode']}")
         print(f"outline_generated: {state['outline_generated']}")
         print(f"learning_progress: {state['progress']}")
         print(f"current_chunk: {state['current_chunk']}/{state['chunks_total']}")
+        print(f"current_focus: {state['current_focus'] if state['current_focus'] is not None else 'none'}")
+        print(f"focus_history_count: {len(state['focus_history'])}")
+        print(f"interaction_count: {state['interaction_count']}")
+        print(f"ready_to_consolidate: {state['ready_to_consolidate']}")
 
     print("open_questions:")
     if open_questions:
@@ -435,19 +474,19 @@ def _print_triage_group(label: str, rows: list[dict[str, object]]) -> None:
         if reason:
             print(f"  reason: {_preview_text(reason)}")
         if triage_card is None:
-            print(f"  next_action: python -m scripts.pkls triage prompt --id {item['id']}")
+            print(f"  next_action: python pkls triage prompt --id {item['id']}")
         print("")
 
 
 def _print_learning_rows(rows: list[dict[str, object]]) -> None:
-    groups = {"doing": [], "todo": [], "done": [], "none": []}
+    groups = {"doing": [], "todo": [], "paused": [], "done": [], "none": []}
     for row in rows:
         queue_entry = row["queue_entry"]
         status = "none" if queue_entry is None else queue_entry["status"]
         groups[status].append(row)
 
     print(f"learning items: {len(rows)}")
-    non_empty_labels = [label for label in ("doing", "todo", "done", "none") if groups[label]]
+    non_empty_labels = [label for label in ("doing", "todo", "paused", "done", "none") if groups[label]]
     if not non_empty_labels:
         print("")
         print("  - none")
@@ -469,7 +508,7 @@ def _handle_triage_prompt_batch(limit: int, root: Path) -> None:
         print("no candidate items need triage cards")
         return
 
-    prompt_path, selected_ids, total_pending = codex_workflow.write_triage_batch_prompt(limit, root)
+    prompt_path, selected_ids, total_pending = agent_workflow.write_triage_batch_prompt(limit, root)
     print(f"saved triage batch prompt: {prompt_path}")
     print(f"selected_items: {len(selected_ids)}/{total_pending}")
     for doc_id in selected_ids:
@@ -483,11 +522,15 @@ def _print_learning_group(label: str, rows: list[dict[str, object]]) -> None:
         state = row["state"]
         progress = "not_started" if state is None else f"{state['progress']:.2f}"
         chunk_progress = "0/0" if state is None else f"{state['current_chunk']}/{state['chunks_total']}"
+        processing_mode = "unknown" if state is None else state["processing_mode"]
+        current_focus = "none" if state is None or state["current_focus"] is None else state["current_focus"]
         print(f"- {item['id']}")
         print(f"  title: {item['title']}")
         print(f"  item_status: {item['status']}")
+        print(f"  processing_mode: {processing_mode}")
         print(f"  progress: {progress}")
         print(f"  chunks: {chunk_progress}")
+        print(f"  current_focus: {current_focus}")
         print(f"  next_action: {row['next_action']}")
         if index < len(rows) - 1:
             print("")
@@ -558,18 +601,25 @@ def _handle_config(args: argparse.Namespace, root: Path) -> None:
 def _handle_publish(args: argparse.Namespace, root: Path) -> None:
     if args.publish_command == "triage":
         target_path = publish.publish_triage(args.id, root)
-        print(f"published triage: {target_path}")
+        print(f"synchronized triage: {target_path}")
         return
 
     if args.publish_command == "learn":
         target_paths = publish.publish_learning(args.id, root)
-        print(f"published learning files: {len(target_paths)}")
+        print(f"synchronized learning files: {len(target_paths)}")
+        for path in target_paths:
+            print(path)
+        return
+
+    if args.publish_command == "consolidate":
+        target_paths = publish.publish_consolidation(args.id, root)
+        print(f"synchronized consolidation files: {len(target_paths)}")
         for path in target_paths:
             print(path)
         return
 
     target_paths = publish.publish_item(args.id, root)
-    print(f"published files: {len(target_paths)}")
+    print(f"synchronized files: {len(target_paths)}")
     for path in target_paths:
         print(path)
 

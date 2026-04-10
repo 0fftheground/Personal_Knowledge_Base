@@ -17,18 +17,34 @@ LOGGER = logging.getLogger(__name__)
 
 SOURCE_TYPES = {"auto", "manual"}
 CONTENT_TYPES = {"paper", "blog", "github", "book"}
-CONTENT_STATUSES = {"candidate", "accepted", "rejected", "learning", "done", "archived"}
+CONTENT_STATUSES = {"candidate", "accepted", "rejected", "learning", "paused", "done", "archived"}
 AI_RECOMMENDATIONS = {"skip", "skim", "learn"}
 MANUAL_DECISIONS = {None, "accept", "reject", "later"}
 STORAGE_TIERS = {"full", "sync_only"}
 SYNC_STATUSES = {"none", "active", "inbox"}
-LEARNING_STATUSES = {"learning", "done"}
-QUEUE_STATUSES = {"todo", "doing", "done"}
-QUEUE_STATUS_ORDER = {"doing": 0, "todo": 1, "done": 2}
+LEARNING_STATUSES = {"learning", "paused", "done"}
+LEARNING_PROCESSING_MODES = {"single_pass", "chunked"}
+QUEUE_STATUSES = {"todo", "doing", "paused", "done"}
+QUEUE_STATUS_ORDER = {"doing": 0, "todo": 1, "paused": 2, "done": 3}
 LEARNING_STATE_DEFAULTS = {
+    "initialized": False,
+    "processing_mode": "single_pass",
+    "size_metrics": {
+        "pages": 0,
+        "chars": 0,
+        "estimated_tokens": 0,
+        "heading_count": 0,
+    },
+    "current_focus": None,
+    "focus_history": [],
+    "interaction_count": 0,
+    "chunk_manifest_path": None,
+    "insights": [],
+    "session_notes": [],
     "outline_generated": False,
     "document_outline": [],
     "core_summary": "",
+    "ready_to_consolidate": False,
 }
 DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 MAX_DOC_ID_LENGTH = 80
@@ -74,6 +90,26 @@ def get_learning_outputs_root(root: Path | None = None) -> Path:
     return get_learning_root(root) / "outputs"
 
 
+def get_learning_prompts_root(root: Path | None = None) -> Path:
+    return get_learning_root(root) / "prompts"
+
+
+def get_consolidation_root(root: Path | None = None) -> Path:
+    return get_workspace_root(root) / "consolidation"
+
+
+def get_consolidation_plans_root(root: Path | None = None) -> Path:
+    return get_consolidation_root(root) / "plans"
+
+
+def get_consolidation_drafts_root(root: Path | None = None) -> Path:
+    return get_consolidation_root(root) / "drafts"
+
+
+def get_consolidation_indexes_root(root: Path | None = None) -> Path:
+    return get_consolidation_root(root) / "indexes"
+
+
 def get_notes_root(root: Path | None = None) -> Path:
     return get_workspace_root(root) / "notes"
 
@@ -88,6 +124,10 @@ def ensure_storage_layout(root: Path | None = None) -> None:
         workspace_root / "triage" / "prompts",
         workspace_root / "learning" / "states",
         workspace_root / "learning" / "outputs",
+        workspace_root / "learning" / "prompts",
+        workspace_root / "consolidation" / "plans",
+        workspace_root / "consolidation" / "drafts",
+        workspace_root / "consolidation" / "indexes",
         workspace_root / "notes",
     ]
 
@@ -453,28 +493,48 @@ def get_queue_entry(doc_id: str, root: Path | None = None) -> dict[str, Any] | N
 def create_learning_state(
     *,
     doc_id: str,
+    initialized: bool = False,
+    processing_mode: str = "single_pass",
+    size_metrics: dict[str, int] | None = None,
+    current_focus: str | None = None,
+    focus_history: list[str] | None = None,
+    interaction_count: int = 0,
     progress: float,
     current_chunk: int,
     chunks_total: int,
+    chunk_manifest_path: str | None = None,
     key_points: list[str],
+    insights: list[str] | None = None,
+    session_notes: list[str] | None = None,
     questions: list[str],
     next_action: str,
     status: str,
     outline_generated: bool = False,
     document_outline: list[str] | None = None,
     core_summary: str = "",
+    ready_to_consolidate: bool = False,
 ) -> dict[str, Any]:
     state = {
         "doc_id": doc_id,
+        "initialized": initialized,
+        "processing_mode": processing_mode,
+        "size_metrics": _normalize_size_metrics(size_metrics),
+        "current_focus": current_focus,
+        "focus_history": [] if focus_history is None else focus_history,
+        "interaction_count": interaction_count,
         "progress": float(progress),
         "current_chunk": current_chunk,
         "chunks_total": chunks_total,
+        "chunk_manifest_path": chunk_manifest_path,
         "key_points": key_points,
+        "insights": [] if insights is None else insights,
+        "session_notes": [] if session_notes is None else session_notes,
         "questions": questions,
         "outline_generated": outline_generated,
         "document_outline": [] if document_outline is None else document_outline,
         "core_summary": core_summary,
         "next_action": next_action,
+        "ready_to_consolidate": ready_to_consolidate,
         "status": status,
     }
     validate_learning_state(state)
@@ -577,28 +637,48 @@ def validate_learning_state(state: dict[str, Any]) -> None:
         state,
         {
             "doc_id",
+            "initialized",
+            "processing_mode",
+            "size_metrics",
+            "current_focus",
+            "focus_history",
+            "interaction_count",
             "progress",
             "current_chunk",
             "chunks_total",
+            "chunk_manifest_path",
             "key_points",
+            "insights",
+            "session_notes",
             "questions",
             "outline_generated",
             "document_outline",
             "core_summary",
             "next_action",
+            "ready_to_consolidate",
             "status",
         },
     )
     _validate_doc_id(state["doc_id"])
+    _validate_bool("initialized", state["initialized"])
+    _validate_choice("processing_mode", state["processing_mode"], LEARNING_PROCESSING_MODES)
+    _validate_size_metrics("size_metrics", state["size_metrics"])
+    _validate_optional_string("current_focus", state["current_focus"])
+    _validate_string_list("focus_history", state["focus_history"])
+    _validate_int("interaction_count", state["interaction_count"])
     _validate_number("progress", state["progress"])
     _validate_int("current_chunk", state["current_chunk"])
     _validate_int("chunks_total", state["chunks_total"])
+    _validate_optional_relpath("chunk_manifest_path", state["chunk_manifest_path"])
     _validate_string_list("key_points", state["key_points"])
+    _validate_string_list("insights", state["insights"])
+    _validate_string_list("session_notes", state["session_notes"])
     _validate_string_list("questions", state["questions"])
     _validate_bool("outline_generated", state["outline_generated"])
     _validate_string_list("document_outline", state["document_outline"])
     _validate_text("core_summary", state["core_summary"])
     _validate_string("next_action", state["next_action"])
+    _validate_bool("ready_to_consolidate", state["ready_to_consolidate"])
     _validate_choice("status", state["status"], LEARNING_STATUSES)
 
 
@@ -656,13 +736,29 @@ def _validate_text(name: str, value: Any) -> None:
         raise StorageError(f"{name} must be a string")
 
 
+def _normalize_size_metrics(value: dict[str, int] | None) -> dict[str, int]:
+    normalized = dict(LEARNING_STATE_DEFAULTS["size_metrics"])
+    if value is None:
+        return normalized
+    normalized.update(value)
+    return normalized
+
+
 def _normalize_learning_state(state: Any) -> Any:
     if not isinstance(state, dict):
         return state
     normalized = dict(state)
     for key, default in LEARNING_STATE_DEFAULTS.items():
-        if key not in normalized:
-            normalized[key] = list(default) if isinstance(default, list) else default
+        if key in normalized:
+            if key == "size_metrics":
+                normalized[key] = _normalize_size_metrics(normalized[key])
+            continue
+        if isinstance(default, list):
+            normalized[key] = list(default)
+        elif isinstance(default, dict):
+            normalized[key] = dict(default)
+        else:
+            normalized[key] = default
     return normalized
 
 
@@ -735,3 +831,13 @@ def _validate_optional_hash(name: str, value: Any) -> None:
         return
     if not isinstance(value, str) or not re.fullmatch(r"[a-f0-9]{64}", value):
         raise StorageError(f"{name} must be null or a sha256 hex string")
+
+
+def _validate_size_metrics(name: str, value: Any) -> None:
+    if not isinstance(value, dict):
+        raise StorageError(f"{name} must be an object")
+    expected_keys = {"pages", "chars", "estimated_tokens", "heading_count"}
+    if set(value.keys()) != expected_keys:
+        raise StorageError(f"{name} keys must be exactly {sorted(expected_keys)}")
+    for key in expected_keys:
+        _validate_int(f"{name}.{key}", value[key])

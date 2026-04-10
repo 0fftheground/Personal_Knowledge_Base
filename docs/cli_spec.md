@@ -10,6 +10,11 @@
 * pkls publish
 * pkls config
 
+This document mixes:
+
+* current MVP command behavior
+* the intended learning workflow semantics behind the current prompt-generation commands
+
 ---
 
 ## 1. Add
@@ -102,16 +107,17 @@ Behavior:
 * include triage recommendation when available
 * include triage summary and reason when a triage card exists
 
-### Generate Codex Triage Prompt
+### Generate Agent Triage Prompt
 
 pkls triage prompt --id <content_id>
 
 Behavior:
 
-* write a Codex-ready triage prompt to `<workspace_root>/triage/prompts/<content_id>.md`
-* point Codex to the record metadata, resolved raw file, and target card
+* write an agent-ready triage prompt to `<workspace_root>/triage/prompts/<content_id>.md`
+* point the AI agent to the record metadata, resolved raw file, and target card
+* instruct bounded reading rather than full-document learning
 
-### Generate Codex Triage Prompts In Batch
+### Generate Agent Triage Prompts In Batch
 
 pkls triage prompt-batch [--limit <N>]
 
@@ -120,7 +126,7 @@ Behavior:
 * select candidate items that do not yet have triage cards
 * order them by priority, then title
 * write one batch prompt file under `<workspace_root>/triage/prompts/`
-* tell Codex which items to process in sequence and where each triage card should be written
+* tell the AI agent which items to process in sequence and where each triage card should be written
 * default `--limit` to `5`
 
 ### Accept
@@ -179,18 +185,59 @@ Behavior:
 
 * sync queue.json against metadata and learning state
 * select the highest-priority actionable item
-* print a Codex-ready prompt in `outline` or `deep_dive` mode
+* write an agent-ready prompt file under `<workspace_root>/learning/prompts/<content_id>__*.md`
+* print the saved file path plus the selected document id and inferred mode
 
-### Generate Codex Learning Prompt
+### Start Or Resume A Learning Session
 
-pkls learn prompt --id <content_id> --mode <outline|deep_dive> [--focus <text>]
+pkls learn --id <content_id> [--focus <text>] [--mode <outline|deep_dive>]
+
+Current behavior:
+
+* generate an agent-ready learning prompt file
+* resolve the raw content path from full/sync stores
+* when no state exists, initialize the document framework
+* when a state already exists, continue from the current learning context
+* `--mode` is an internal override; the intended user path is usually `pkls learn --id ...` with optional `--focus`
+
+Target behavior:
+
+* `--focus` describes user intent, not raw chunk text
+* the system selects only the relevant local source context
+* the user controls how long the agent session continues
+
+### Pause A Learning Session
+
+pkls learn pause --id <content_id>
 
 Behavior:
 
-* print a Codex-ready learning prompt
-* resolve the raw content path from full/sync stores
-* in `outline` mode, instruct Codex to generate document structure first
-* in `deep_dive` mode, instruct Codex to process one focused learning step
+* generate an agent prompt that records the current learning session
+* update `state.json`, `summary.md`, `insights.md`, and `next_action`
+* preserve resume capability without depending on chat history
+
+### Consolidate Learned Material
+
+pkls learn consolidate --id <content_id>
+
+Behavior:
+
+* generate an agent prompt that adapts learned material into the user's Obsidian knowledge system
+* read the Obsidian structure index and a small candidate set of relevant notes
+* write consolidation plans and note drafts
+
+### Publish Consolidation Outputs
+
+pkls publish consolidate --id <content_id>
+
+Behavior:
+
+* copy consolidation plans and drafts into the configured Obsidian vault
+* publish under:
+  * `pkls/consolidation/plans/`
+  * `pkls/consolidation/drafts/`
+
+---
 
 ## 5. Status
 
@@ -218,6 +265,8 @@ Behavior:
 
 * copy the triage card into the configured Obsidian vault
 * publish under `pkls/triage/`
+* refresh the Obsidian index for the published note
+* remove the published note if the workspace triage card no longer exists
 
 ### Publish Learning Outputs
 
@@ -231,6 +280,8 @@ Behavior:
   * `pkls/learning/summaries/`
   * `pkls/learning/insights/`
   * `pkls/learning/qa/`
+* refresh the Obsidian index for any published note files
+* remove stale published files when their workspace outputs no longer exist
 
 ### Publish All Available Reading Outputs
 
@@ -240,6 +291,9 @@ Behavior:
 
 * publish the triage card if present
 * publish learning outputs if present
+* publish consolidated note drafts when available
+* refresh the Obsidian index for any published note files
+* remove stale published files when their workspace sources no longer exist
 
 ---
 
@@ -292,3 +346,4 @@ Behavior:
 * explicit errors
 * deterministic behavior
 * all write operations persist immediately
+* prompt generation is separate from live agent interaction

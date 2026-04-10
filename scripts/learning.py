@@ -1,4 +1,4 @@
-"""Learning helpers for the Codex-driven workflow."""
+"""Learning helpers for the agent-driven workflow."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from scripts import storage
 
 
 LOGGER = logging.getLogger(__name__)
-LEARNING_LIST_ORDER = {"doing": 0, "todo": 1, "done": 2, "none": 3}
+LEARNING_LIST_ORDER = {"doing": 0, "todo": 1, "paused": 2, "done": 3, "none": 4}
 
 
 def view_queue(root: Path | None = None) -> list[dict[str, Any]]:
@@ -68,6 +68,57 @@ def get_next_learning_target(root: Path | None = None) -> dict[str, Any]:
     raise ValueError("no accepted or learning items available in queue")
 
 
+def resolve_learning_mode(doc_id: str, root: Path | None = None) -> str:
+    base = root or storage.get_repo_root()
+    item = storage.read_content_item_by_id(doc_id, base)
+    if item["status"] not in {"accepted", "learning", "paused", "done"}:
+        raise ValueError(f"learning prompt requires an accepted or learning item: {doc_id}")
+    return _next_learning_mode(item, base)
+
+
+def collect_material_profile(doc_id: str, root: Path | None = None) -> dict[str, int]:
+    base = root or storage.get_repo_root()
+    item = storage.read_content_item_by_id(doc_id, base)
+    raw_path = storage.resolve_raw_path(item, base)
+    size_bytes = int(raw_path.stat().st_size)
+    sample_text = ""
+    if raw_path.suffix.lower() in {".md", ".txt", ".rst", ".json", ".yaml", ".yml", ".csv", ".tsv", ".py", ".toml", ".html", ".htm", ".xml"}:
+        try:
+            with raw_path.open("r", encoding="utf-8", errors="ignore") as handle:
+                sample_text = handle.read(8192)
+        except OSError:
+            sample_text = ""
+
+    sample_lines = sample_text.splitlines()
+    heading_count = sum(
+        1
+        for line in sample_lines
+        if line.strip().startswith("#")
+        or line.strip().lower().startswith(("chapter ", "section "))
+    )
+    page_markers = sum(1 for line in sample_lines if line.strip().lower().startswith("page "))
+    estimated_tokens = max(1, size_bytes // 4)
+    return {
+        "pages": page_markers,
+        "chars": size_bytes,
+        "estimated_tokens": estimated_tokens,
+        "heading_count": heading_count,
+    }
+
+
+def suggest_processing_mode(doc_id: str, root: Path | None = None) -> str:
+    base = root or storage.get_repo_root()
+    item = storage.read_content_item_by_id(doc_id, base)
+    metrics = collect_material_profile(doc_id, base)
+    if item["content_type"] == "book":
+        return "chunked"
+    if item["content_type"] == "github":
+        return "chunked"
+    if item["content_type"] == "paper":
+        return "chunked" if metrics["estimated_tokens"] >= 4000 or metrics["pages"] >= 8 else "single_pass"
+    return "chunked" if metrics["estimated_tokens"] >= 2500 or metrics["heading_count"] >= 8 or metrics["pages"] >= 12 else "single_pass"
+
+
 def list_learning_items(root: Path | None = None) -> list[dict[str, Any]]:
     base = root or storage.get_repo_root()
     queue = sync_queue(base)
@@ -75,7 +126,7 @@ def list_learning_items(root: Path | None = None) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
 
     for item in storage.list_content_items(root=base):
-        if item["status"] not in {"accepted", "learning", "done"}:
+        if item["status"] not in {"accepted", "learning", "paused", "done"}:
             continue
         state = storage.read_learning_state(item["id"], base) if storage.learning_state_exists(item["id"], base) else None
         queue_entry = queue_entries.get(item["id"])
@@ -123,6 +174,8 @@ def _desired_queue_entry(item: dict[str, Any], root: Path) -> dict[str, Any] | N
         return None
     if item["status"] == "done" or (state is not None and state["status"] == "done"):
         return storage.create_queue_entry(item["id"], item["priority"], "done")
+    if item["status"] == "paused" or (state is not None and state["status"] == "paused"):
+        return storage.create_queue_entry(item["id"], item["priority"], "paused")
     if item["status"] == "learning" or state is not None:
         return storage.create_queue_entry(item["id"], item["priority"], "doing")
     if item["status"] == "accepted":
@@ -135,7 +188,7 @@ def _next_learning_mode(item: dict[str, Any], root: Path) -> str:
         return "outline"
 
     state = storage.read_learning_state(item["id"], root)
-    if not state["outline_generated"]:
+    if not state["initialized"] or not state["outline_generated"]:
         return "outline"
     return "deep_dive"
 
@@ -145,13 +198,19 @@ def describe_next_action(
     state: dict[str, Any] | None,
 ) -> str:
     if state is not None:
-        if not state["outline_generated"]:
-            return f"Run pkls learn prompt --id {item['id']} --mode outline"
+        if not state["initialized"] or not state["outline_generated"]:
+            return f"Run pkls learn --id {item['id']}"
+        if state["status"] == "paused":
+            return f"Resume with pkls learn --id {item['id']}" if not state["current_focus"] else f"Resume focus '{state['current_focus']}' with pkls learn --id {item['id']}"
         if state["status"] == "done":
             return "Review generated learning outputs"
-        return f"Run pkls learn prompt --id {item['id']} --mode deep_dive"
+        if state["ready_to_consolidate"]:
+            return f"Run pkls learn consolidate --id {item['id']}"
+        return f"Continue with pkls learn --id {item['id']}" if not state["current_focus"] else f"Continue focus '{state['current_focus']}' with pkls learn --id {item['id']}"
     if item["status"] == "accepted":
-        return f"Run pkls learn prompt --id {item['id']} --mode outline"
+        return f"Run pkls learn --id {item['id']}"
+    if item["status"] == "paused":
+        return f"Resume with pkls learn --id {item['id']}"
     if item["status"] == "candidate":
         return "Await triage decision"
     if item["status"] == "rejected":
@@ -160,4 +219,4 @@ def describe_next_action(
         return "Item is archived"
     if item["status"] == "done":
         return "Review generated learning outputs"
-    return "Resume learning in Codex"
+    return "Resume learning with the AI agent"

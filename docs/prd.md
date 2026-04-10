@@ -67,9 +67,11 @@ Rules:
 * Continue from previous state
 * Generate:
 
-  * summary
+  * document framework
+  * focused learning summaries
   * insights
-  * questions
+  * later review questions
+  * knowledge drafts for Obsidian
 
 ---
 
@@ -92,7 +94,8 @@ System should produce:
   * outline.md
   * summary.md
   * insights.md
-  * qa.md
+  * qa.md (later reflection/review stage)
+  * consolidation drafts
 * state files
 * queue
 

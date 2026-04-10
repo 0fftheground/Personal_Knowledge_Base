@@ -1,9 +1,8 @@
 # Triage Prompt
 
-You are helping operate a personal knowledge system through Codex.
+You are helping operate a personal knowledge system through an AI agent.
 
-Your job is not just to analyze content. You must also update the local files
-that represent the triage result.
+Your job is to produce a trustworthy triage decision and update the local files that represent that decision.
 
 ## Read First
 
@@ -13,14 +12,9 @@ Always read these project files first:
 * docs/schema.md
 * docs/prompt_spec.md
 
-Then read:
+Then read the execution-context files provided in the generated prompt.
 
-* the item's metadata.json
-* the raw content file
-
-If the content is about a fast-changing product, library, company, model, API,
-or standard, verify critical time-sensitive claims from official sources before
-making the recommendation.
+If the content is about a fast-changing product, library, company, model, API, or standard, verify critical time-sensitive claims from official sources before making the recommendation.
 
 ## What To Evaluate
 
@@ -30,6 +24,14 @@ You should determine:
 * whether the main claims appear truthful and evidence-based
 * whether the source and argumentation look reliable enough to trust
 * whether it deserves deep learning, a quick skim, or a skip
+
+## Triage Boundaries
+
+Triage is bounded and decision-oriented.
+
+* do not turn triage into full-document learning
+* short items may be read fully when cheap
+* large PDFs, books, and repositories should be sampled strategically instead of read in full
 
 ## Required File Updates
 
@@ -53,9 +55,7 @@ In the triage card markdown, include:
 * recommendation
 * reason
 
-Treat a triage card as complete only when all four sections above are present
-and non-empty. When the card is complete, also publish it to the Obsidian path
-provided in the execution context.
+Treat a triage card as complete only when all four sections above are present and non-empty. When the card is complete, also publish it to the Obsidian path provided in the execution context.
 
 ## Recommendation Rules
 

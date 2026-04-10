@@ -29,15 +29,17 @@ Implement external raw storage + workspace record storage
 
 ---
 
-## Phase 2: Triage Pipeline
+## Phase 2: Bounded Triage Pipeline
 
 ### Goal
 
-Process auto records into candidate cards
+Process candidate records into decision cards without turning triage into full learning
 
 ### Tasks
 
 * resolve raw content from external stores
+* classify material type and size roughly
+* read bounded source samples only
 * generate:
 
   * summary
@@ -51,60 +53,128 @@ Process auto records into candidate cards
 
 ### Non-goals
 
-* no auto queue insertion
-* no learning
+* no full-document learning
+* no queue auto-advancement beyond accept/reject decisions
 
 ---
 
-## Phase 3: Learning Pipeline
+## Phase 3: Learn Initialize
 
 ### Goal
 
-Implement outline-first, chunk-based learning
+Create a document framework and choose the correct learning mode
 
 ### Tasks
 
-* chunk content
-* generate document outline first
-* process one chunk
-* update state
-* generate:
-
-  * outline.md
-  * summary.md
-  * insights.md
-  * qa.md
+* inspect extracted material size
+* choose `single_pass` or `chunked`
+* generate document outline and core summary
+* initialize `state.json`
+* create chunk manifests for large materials only
 
 ### Output
 
-* resumable learning system
+* resumable learning initialization
+* `outline.md`
+* initialized state
 
 ### Non-goals
 
-* no full document processing
-* no chat history usage
+* no long interactive session handling yet
+* no consolidation into Obsidian notes yet
 
 ---
 
-## Phase 4: Queue System
+## Phase 4: Interactive Focus Learning
 
 ### Goal
 
-Control learning order
+Support user-controlled topic sessions on top of initialized learning state
+
+### Tasks
+
+* accept a user `focus`
+* retrieve only the relevant local source context
+* update:
+
+  * `summary.md`
+  * `insights.md`
+  * `state.json`
+* support pause/resume without hidden memory
+
+### Output
+
+* focused learning sessions
+* resumable session state
+
+### Non-goals
+
+* no review-question generation by default
+
+---
+
+## Phase 5: Reflection And Review Questions
+
+### Goal
+
+Generate questions only after enough learning has accumulated
+
+### Tasks
+
+* define readiness signals for review
+* generate understanding, connection, and application questions
+* write `qa.md`
+
+### Output
+
+* delayed, higher-quality review questions
+
+---
+
+## Phase 6: Consolidation Layer
+
+### Goal
+
+Adapt learned material into the existing Obsidian knowledge system
+
+### Tasks
+
+* build an Obsidian structure index
+* rank relevant existing notes
+* create consolidation plans
+* draft knowledge notes or note updates
+
+### Output
+
+* consolidation/plans/*
+* consolidation/drafts/*
+
+### Non-goals
+
+* no full-vault reread on every consolidation run
+
+---
+
+## Phase 7: Queue System
+
+### Goal
+
+Control learning order without forcing automatic deep processing
 
 ### Tasks
 
 * read/write queue.json
 * pick next item
-* update status
+* support paused items
+* update status based on state
 
 ---
 
-## Phase 5: CLI Interface
+## Phase 8: CLI Interface
 
 ### Goal
 
-Basic commands
+Expose the bounded triage + controlled learning workflow
 
 ### Commands
 
@@ -116,9 +186,14 @@ Basic commands
 * publish
 * config
 
+CLI additions:
+
+* explicit pause prompt generation
+* explicit consolidation prompt generation
+
 ---
 
-## Phase 6: Stabilization
+## Phase 9: Stabilization
 
 ### Goal
 
@@ -129,3 +204,4 @@ Make system robust
 * error handling
 * logging
 * edge cases
+* consistency checks between state, queue, and outputs

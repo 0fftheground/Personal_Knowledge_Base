@@ -55,15 +55,15 @@ Before first use:
 
 Then:
 
-1. Configure local paths with `python -m scripts.pkls config ...`
-2. Add content with `python -m scripts.pkls add ...`
+1. Configure local paths with `python pkls config ...`
+2. Add content with `python pkls add ...`
    The CLI now auto-detects URL-list input, derives titles when omitted, defaults all ingest to candidate, supports explicit `--accept`, and skips duplicate imports
-3. Use `python -m scripts.pkls triage list` to review candidate material
-4. Use `python -m scripts.pkls learn queue` or `python -m scripts.pkls learn list` to inspect learning progress
-5. Use `python -m scripts.pkls triage prompt ...` or `python -m scripts.pkls learn next`
-   / `python -m scripts.pkls learn prompt ...` to generate Codex prompts
-   Triage prompts are saved under `<workspace_root>/triage/prompts/`, and complete triage cards are synced to Obsidian through the triage workflow
-6. Let Codex update cards, state, and outputs
+3. Use `python pkls triage list` to review candidate material
+4. Use `python pkls learn queue` or `python pkls learn list` to inspect learning progress
+5. Use `python pkls triage prompt ...` or `python pkls learn next`
+   / `python pkls learn --id ...` to generate agent prompts
+   Triage prompts are bounded and decision-oriented. Learning is user-controlled: initialize a document, explore one or more focus sessions with your AI agent, then pause or consolidate intentionally. Prompt files are saved under the workspace and can be resumed later
+6. Let the AI agent update cards, state, and outputs
 7. Publish readable outputs to Obsidian
 
 Primary usage guide:
@@ -77,7 +77,7 @@ Primary usage guide:
 Recommended reading order:
 
 * `docs/how_to_use.md` - end-to-end operating guide
-* `docs/codex_workflow.md` - Codex-assisted triage and learning flow
+* `docs/agent_workflow.md` - agent-assisted triage and learning flow
 * `docs/cli_spec.md` - CLI command reference
 * `docs/prd.md` - product intent
 * `docs/architecture.md` - storage and workflow layout
@@ -88,7 +88,7 @@ Document addresses:
 
 * `.pkls.local.example.json`
 * `docs/how_to_use.md`
-* `docs/codex_workflow.md`
+* `docs/agent_workflow.md`
 * `docs/cli_spec.md`
 * `docs/prd.md`
 * `docs/architecture.md`
@@ -103,8 +103,9 @@ MVP in development:
 
 * workspace-based state storage
 * external raw full/sync stores
-* Codex-assisted triage
-* queue-synced Codex-assisted learning
+* bounded agent-assisted triage
+* queue-synced agent-assisted learning initialization
+* user-controlled focus learning workflow
 * Obsidian publish path configuration
 
 ## Local Config
@@ -116,3 +117,4 @@ Use:
 
 `.pkls.local.json` is intentionally ignored by git because it contains
 machine-specific paths and user-specific workspace locations.
+
