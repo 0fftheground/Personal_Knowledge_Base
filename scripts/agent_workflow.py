@@ -15,7 +15,6 @@ from scripts import triage
 
 def build_triage_prompt(doc_id: str, root: Path | None = None) -> str:
     base = root or storage.get_repo_root()
-    workspace_root = storage.get_workspace_root(base)
     item = storage.read_content_item_by_id(doc_id, base)
     if item["status"] != "candidate":
         raise ValueError(f"triage prompt requires a candidate item: {doc_id}")
@@ -24,31 +23,19 @@ def build_triage_prompt(doc_id: str, root: Path | None = None) -> str:
     raw_path = storage.resolve_raw_path(item, base)
     card_path = storage.get_triage_cards_root(base) / f"{item['id']}.md"
     publish_path = local_config.get_notes_publish_root(base) / publish.PUBLISH_ROOT_DIR / "triage" / f"{item['id']}.md"
-    prompt_path = base / "prompts" / "triage_prompt.md"
     size_metrics = learning.collect_material_profile(doc_id, base)
     reading_budget = _triage_budget_instruction(item["content_type"], size_metrics)
 
+    prompt_path = base / "prompts" / "triage_prompt.md"
     prompt = prompt_path.read_text(encoding="utf-8").strip()
     return (
         f"{prompt}\n\n"
         "## Execution Context\n\n"
-        f"- Repository root: {base}\n"
-        f"- Workspace root: {workspace_root}\n"
-        f"- Prompt file: {prompt_path}\n"
-        f"- Metadata file: {metadata_path}\n"
-        f"- Raw content file: {raw_path}\n"
-        f"- Target triage card: {card_path}\n"
-        f"- Auto-publish target: {publish_path}\n"
+        f"- Files: metadata={metadata_path}, raw={raw_path}, card={card_path}, publish={publish_path}\n"
         f"- Size metrics: {size_metrics}\n\n"
-        "## Concrete Instructions\n\n"
-        f"1. Read {metadata_path} and inspect {raw_path} using bounded triage only.\n"
-        f"2. Triage reading budget: {reading_budget}\n"
-        "3. Judge the content for truthfulness, source reliability, and learning value.\n"
-        "4. Update metadata.json so ai_recommendation is correct.\n"
-        "5. Keep status as candidate and do not change the queue.\n"
-        f"6. Write or update {card_path} with summary, key points, recommendation, and reason.\n"
-        f"7. If the triage card is complete, copy it to {publish_path}.\n"
-        "8. Return a short confirmation after the file edits are complete.\n"
+        "## Instructions\n\n"
+        f"1. Inspect bounded context only. Budget: {reading_budget}\n"
+        "2. Update metadata, write the compact card, publish it if complete, and confirm.\n"
     )
 
 
@@ -66,7 +53,6 @@ def build_triage_batch_prompt(
     root: Path | None = None,
 ) -> str:
     base = root or storage.get_repo_root()
-    workspace_root = storage.get_workspace_root(base)
     prompt_path = base / "prompts" / "triage_prompt.md"
     prompt = prompt_path.read_text(encoding="utf-8").strip()
     selected_count = len(rows)
@@ -83,31 +69,21 @@ def build_triage_batch_prompt(
         item_sections.append(
             f"### Item {index}: {item['id']}\n\n"
             f"- Title: {item['title']}\n"
-            f"- Source type: {item['source_type']}\n"
-            f"- Priority: {item['priority']}\n"
-            f"- Metadata file: {metadata_path}\n"
-            f"- Raw content file: {raw_path}\n"
-            f"- Target triage card: {card_path}\n"
-            f"- Auto-publish target: {publish_path}\n"
+            f"- Paths: metadata={metadata_path}, raw={raw_path}, card={card_path}, publish={publish_path}\n"
             f"- Size metrics: {size_metrics}\n"
-            f"- Bounded reading rule: {_triage_budget_instruction(item['content_type'], size_metrics)}\n"
+            f"- Reading rule: {_triage_budget_instruction(item['content_type'], size_metrics)}\n"
         )
 
     return (
         f"{prompt}\n\n"
         "## Batch Execution Context\n\n"
-        f"- Repository root: {base}\n"
-        f"- Workspace root: {workspace_root}\n"
-        f"- Prompt file: {prompt_path}\n"
         f"- Selected candidate items: {selected_count}\n"
         f"- Total candidate items needing triage cards: {total_pending}\n"
         f"- Remaining after this batch: {remaining_count}\n\n"
         "## Batch Instructions\n\n"
-        "1. Process the selected items strictly in the order listed below.\n"
-        "2. For each item: read metadata and bounded source context, update ai_recommendation, keep status as candidate, write the triage card, and publish it to the listed Obsidian path when the card is complete.\n"
-        "3. Finish the current item before moving to the next one.\n"
-        "4. Do not change the queue.\n"
-        "5. Return a short confirmation with the completed item ids and any remaining items still needing triage.\n\n"
+        "1. Process the selected items in order.\n"
+        "2. For each item: bounded read, update metadata, write compact card, publish if complete.\n"
+        "3. Do not change the queue. Confirm completed ids and remaining count.\n\n"
         "## Selected Items\n\n"
         + "\n".join(item_sections)
     )
@@ -132,7 +108,6 @@ def build_learning_prompt(
 ) -> str:
     base = root or storage.get_repo_root()
     learning.sync_queue(base)
-    workspace_root = storage.get_workspace_root(base)
     item = storage.read_content_item_by_id(doc_id, base)
     if item["status"] not in {"accepted", "learning", "paused", "done"}:
         raise ValueError(f"learning prompt requires an accepted, paused, or learning item: {doc_id}")
@@ -147,7 +122,6 @@ def build_learning_prompt(
     summary_path = output_dir / "summary.md"
     insights_path = output_dir / "insights.md"
     chunk_manifest_path = output_dir / "chunk_manifest.json"
-    prompt_path = base / "prompts" / "learning_prompt.md"
     state_exists = state_path.exists()
     state = storage.read_learning_state(item["id"], base) if state_exists else None
     size_metrics = learning.collect_material_profile(doc_id, base)
@@ -162,59 +136,37 @@ def build_learning_prompt(
     if mode == "deep_dive" and state is not None and state["status"] == "done":
         raise ValueError(f"learning is already complete for {doc_id}")
 
+    prompt_path = base / "prompts" / "learning_prompt.md"
     prompt = prompt_path.read_text(encoding="utf-8").strip()
     focus_line = focus if focus else (state["current_focus"] if state is not None and state["current_focus"] else "No explicit focus yet.")
     execution_context = (
         f"{prompt}\n\n"
         "## Execution Context\n\n"
-        f"- Repository root: {base}\n"
-        f"- Workspace root: {workspace_root}\n"
-        f"- Prompt file: {prompt_path}\n"
         f"- Internal mode: {mode}\n"
         f"- Suggested processing mode: {suggested_mode}\n"
         f"- Size metrics: {size_metrics}\n"
-        f"- Metadata file: {metadata_path}\n"
-        f"- Raw content file: {raw_path}\n"
-        f"- State file: {state_path}\n"
-        f"- Queue file: {queue_path}\n"
+        f"- Files: metadata={metadata_path}, raw={raw_path}, state={state_path}, queue={queue_path}\n"
         f"- Queue entry: {queue_entry}\n"
-        f"- Output directory: {output_dir}\n"
-        f"- Outline file: {outline_path}\n"
-        f"- Summary file: {summary_path}\n"
-        f"- Insights file: {insights_path}\n"
-        f"- Chunk manifest file: {chunk_manifest_path}\n"
+        f"- Outputs: outline={outline_path}, summary={summary_path}, insights={insights_path}, chunk_manifest={chunk_manifest_path}\n"
         f"- Current focus request: {focus_line}\n\n"
     )
 
     if mode == "outline":
         return execution_context + (
-            "## Concrete Instructions\n\n"
-            f"1. Read {metadata_path} and {raw_path}.\n"
-            f"2. Read and update {queue_path}.\n"
-            "3. If state.json does not exist, create it using docs/schema.md.\n"
-            f"4. Decide whether this document should use `single_pass` or `chunked` processing. Suggested mode: {suggested_mode}.\n"
-            "5. Generate a document framework and a core summary.\n"
-            f"6. Update {state_path} with initialized=true, outline_generated=true, processing_mode, size_metrics, document_outline, core_summary, and a strong next_action.\n"
-            "7. Set metadata status to `learning` unless the document is already complete.\n"
-            "8. Update queue.json so this item is present with status=doing.\n"
-            f"9. Write {outline_path}.\n"
-            f"10. If processing_mode is `chunked`, also write {chunk_manifest_path} with structural chunk metadata.\n"
-            "11. Do not generate qa.md during initialization.\n"
-            "12. Return a short confirmation after the file edits are complete.\n"
+            "## Instructions\n\n"
+            f"1. Read {metadata_path}, {raw_path}, and {queue_path}.\n"
+            f"2. Create/update state, set metadata to `learning`, queue to `doing`, and write {outline_path}.\n"
+            f"3. Choose processing mode. Suggested: {suggested_mode}. If chunked, write {chunk_manifest_path}.\n"
+            f"4. Publish the outline to Obsidian now with `python pkls publish learn --id {item['id']}`.\n"
+            "   Keep later focus outputs for manual publish.\n"
+            "5. Do not generate qa.md. Confirm when done.\n"
         )
 
     return execution_context + (
-        "## Concrete Instructions\n\n"
+        "## Instructions\n\n"
         f"1. Read {metadata_path}, {raw_path}, and {state_path}.\n"
-        f"2. Use {outline_path} as the document framework.\n"
-        "3. Treat this prompt as the entry point for a user-controlled focus session.\n"
-        "4. Interpret the focus as user intent, not as raw chunk text.\n"
-        "5. Load only the minimum relevant source context for the requested focus. For large materials, prefer chunk metadata and local chunk files before wider rereads.\n"
-        "6. Guide the user through the topic interactively with the AI agent.\n"
-        "7. Keep explanations grounded in the local files and existing state.\n"
-        "8. Do not auto-generate qa.md in this step.\n"
-        "9. When the user later asks to pause or consolidate, use the dedicated prompt so the session can be saved or integrated intentionally.\n"
-        "10. Return a short confirmation that the focus session context is ready.\n"
+        f"2. Use {outline_path}; treat focus as intent and load only minimum relevant context.\n"
+        "3. Guide the focused session. Do not generate qa.md. Confirm context is ready.\n"
     )
 
 
@@ -244,26 +196,16 @@ def build_pause_prompt(doc_id: str, root: Path | None = None) -> str:
     insights_path = output_dir / "insights.md"
     queue_path = storage.get_learning_root(base) / "queue.json"
     prompt_path = base / "prompts" / "learning_pause_prompt.md"
-
     prompt = prompt_path.read_text(encoding="utf-8").strip()
     return (
         f"{prompt}\n\n"
         "## Execution Context\n\n"
-        f"- Repository root: {base}\n"
-        f"- Metadata file: {metadata_path}\n"
-        f"- State file: {state_path}\n"
-        f"- Queue file: {queue_path}\n"
-        f"- Summary file: {summary_path}\n"
-        f"- Insights file: {insights_path}\n\n"
-        "## Concrete Instructions\n\n"
-        "1. Use the current learning conversation as the source of truth for what was covered in this session.\n"
-        "2. Persist the session into repo state and output files.\n"
-        "3. Update state.json with current_focus, focus_history, interaction_count, session_notes, key_points, insights, next_action, and status=`paused` unless the work is clearly complete.\n"
-        "4. Update metadata.json so the item status matches the saved learning state.\n"
-        "5. Update queue.json so this item becomes `paused` unless the learning is done.\n"
-        "6. Update summary.md and insights.md with the net-new learning from this session.\n"
-        "7. Do not generate qa.md unless the user explicitly asked for review questions.\n"
-        "8. Return a short confirmation with the saved next_action.\n"
+        f"- Files: metadata={metadata_path}, state={state_path}, queue={queue_path}, summary={summary_path}, insights={insights_path}\n\n"
+        "## Instructions\n\n"
+        "1. Use the current conversation as source of truth.\n"
+        "2. Update state, metadata, queue, summary, and insights with net-new learning.\n"
+        "3. Mark paused unless complete; do not generate qa.md unless asked.\n"
+        "4. Confirm with saved next_action.\n"
     )
 
 
@@ -299,36 +241,28 @@ def build_consolidate_prompt(doc_id: str, root: Path | None = None) -> str:
         storage.write_learning_state(state, base)
 
     prompt = prompt_path.read_text(encoding="utf-8").strip()
+    candidate_notes = plan["candidate_notes"][:3]
     candidate_note_lines = "\n".join(
         f"- {candidate['path']}: {candidate['reason']}"
-        for candidate in plan["candidate_notes"]
+        for candidate in candidate_notes
     ) or "- none"
+    remaining_candidate_count = max(len(plan["candidate_notes"]) - len(candidate_notes), 0)
+    if remaining_candidate_count:
+        candidate_note_lines += f"\n- ... and {remaining_candidate_count} more"
 
     return (
         f"{prompt}\n\n"
         "## Execution Context\n\n"
-        f"- Repository root: {base}\n"
-        f"- Metadata file: {metadata_path}\n"
-        f"- State file: {state_path}\n"
-        f"- Outline file: {outline_path}\n"
-        f"- Summary file: {summary_path}\n"
-        f"- Insights file: {insights_path}\n"
-        f"- Obsidian index file: {obsidian_index_path}\n"
-        f"- Consolidation plan file: {plan_path}\n"
-        f"- Draft target file: {draft_path}\n"
+        f"- Files: metadata={metadata_path}, state={state_path}, outline={outline_path}, summary={summary_path}, insights={insights_path}\n"
+        f"- Index: {obsidian_index_path}\n"
+        f"- Plan: {plan_path}\n"
+        f"- Draft: {draft_path}\n"
         f"- Planned action: {plan['action']}\n"
         f"- Focus scope: {plan['focus_scope']}\n"
         f"- Candidate notes:\n{candidate_note_lines}\n\n"
-        "## Concrete Instructions\n\n"
-        "1. Read the current learning state and outputs.\n"
-        "2. Read the Obsidian structure index.\n"
-        "3. Read only the most relevant candidate notes listed in the consolidation plan.\n"
-        "4. Decide how the learned material should fit into the existing knowledge system.\n"
-        f"5. Update {plan_path} if the consolidation action or candidate notes need refinement.\n"
-        f"6. Write {draft_path} as an Obsidian-ready knowledge draft adapted to the user's note structure.\n"
-        "7. Preserve source grounding, but do not merely restate the reading summary.\n"
-        "8. Update state.json so next_action points to draft review or final publishing.\n"
-        "9. Return a short confirmation with the draft path and the chosen consolidation action.\n"
+        "## Instructions\n\n"
+        "1. Read state, outputs, index, and only relevant candidate notes.\n"
+        f"2. Refine {plan_path} if needed, write {draft_path}, update next_action, and confirm.\n"
     )
 
 

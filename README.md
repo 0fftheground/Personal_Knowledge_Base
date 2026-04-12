@@ -56,15 +56,18 @@ Before first use:
 Then:
 
 1. Configure local paths with `python pkls config ...`
-2. Add content with `python pkls add ...`
+2. Or open the desktop controller with `python pkls gui`
+   It lets you add files by drag-and-drop or file picker, generate triage and learning prompts, and review status in one place
+   If you want drag-and-drop support, install the optional `tkinterdnd2` package first
+3. Add content with `python pkls add ...`
    The CLI now auto-detects URL-list input, derives titles when omitted, defaults all ingest to candidate, supports explicit `--accept`, and skips duplicate imports
-3. Use `python pkls triage list` to review candidate material
-4. Use `python pkls learn queue` or `python pkls learn list` to inspect learning progress
-5. Use `python pkls triage prompt ...` or `python pkls learn next`
+4. Use `python pkls triage list` to review candidate material
+5. Use `python pkls learn queue` or `python pkls learn list` to inspect learning progress
+6. Use `python pkls triage prompt ...` or `python pkls learn next`
    / `python pkls learn --id ...` to generate agent prompts
    Triage prompts are bounded and decision-oriented. Learning is user-controlled: initialize a document, explore one or more focus sessions with your AI agent, then pause or consolidate intentionally. Prompt files are saved under the workspace and can be resumed later
-6. Let the AI agent update cards, state, and outputs
-7. Publish readable outputs to Obsidian
+7. Let the AI agent update cards, state, and outputs
+8. Publish readable outputs to Obsidian
 
 Primary usage guide:
 
@@ -117,4 +120,3 @@ Use:
 
 `.pkls.local.json` is intentionally ignored by git because it contains
 machine-specific paths and user-specific workspace locations.
-

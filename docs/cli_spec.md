@@ -9,6 +9,7 @@
 * pkls status
 * pkls publish
 * pkls config
+* pkls gui
 
 This document mixes:
 
@@ -200,6 +201,14 @@ Current behavior:
 * when a state already exists, continue from the current learning context
 * `--mode` is an internal override; the intended user path is usually `pkls learn --id ...` with optional `--focus`
 
+After initialization completes, the user should inspect:
+
+* `pkls status --id <content_id>`
+* `<workspace_root>/learning/outputs/<content_id>/outline.md`
+* the Obsidian note `pkls/learning/outlines/<content_id>.md`, which is published automatically after initialization
+* `<workspace_root>/learning/states/<content_id>/state.json`
+* `<workspace_root>/learning/outputs/<content_id>/chunk_manifest.json` if processing mode is `chunked`
+
 Target behavior:
 
 * `--focus` describes user intent, not raw chunk text
@@ -337,6 +346,20 @@ Behavior:
 
 * save local-only machine paths
 * keep machine-specific paths outside git-tracked project settings
+
+---
+
+## 8. GUI
+
+pkls gui
+
+Behavior:
+
+* launch a local desktop controller for the workflow
+* let the user add files through upload or drag-and-drop when supported
+* show triage candidates, learning queue items, and status details
+* generate the same agent prompt files as the CLI
+* read and write the same workspace and config files as the CLI
 
 ---
 

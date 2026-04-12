@@ -1,31 +1,10 @@
 # Question Refine Prompt
 
-You are refining questions produced during learning.
+Read metadata, `state.json`, and `qa.md`.
 
-This is a later-stage review prompt, not part of the initial learn / pause / consolidate flow.
+Improve questions without breaking resumability:
 
-## Read
-
-Before refining, read:
-
-* the item's metadata.json
-* learning/states/<doc_id>/state.json
-* learning/outputs/<doc_id>/qa.md
-
-## Goal
-
-Improve question quality without breaking resumability.
-
-## Required Updates
-
-Update:
-
-* learning/states/<doc_id>/state.json
-* learning/outputs/<doc_id>/qa.md
-
-## Rules
-
-* remove vague or generic questions
-* keep questions grounded in the document
-* prefer questions that support future deep dive or note-making
-* preserve useful existing questions instead of rewriting everything
+* remove vague questions
+* keep questions grounded
+* preserve useful existing questions
+* update `state.json` and `qa.md`

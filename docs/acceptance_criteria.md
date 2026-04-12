@@ -25,6 +25,7 @@
   * key points
   * recommendation
 * Output saved as markdown card
+* Card is compact enough for quick mobile review
 * Triage remains bounded and does not become full-document learning
 * No automatic learning triggered
 

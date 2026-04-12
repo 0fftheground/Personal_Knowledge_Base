@@ -86,6 +86,8 @@ def build_parser() -> argparse.ArgumentParser:
         publish_target_parser = publish_subparsers.add_parser(publish_target)
         publish_target_parser.add_argument("--id", required=True)
 
+    subparsers.add_parser("gui")
+
     config_parser = subparsers.add_parser("config")
     config_subparsers = config_parser.add_subparsers(dest="config_command", required=True)
     config_subparsers.add_parser("show")
@@ -114,6 +116,10 @@ def main(argv: list[str] | None = None) -> int:
     root = storage.get_repo_root()
 
     try:
+        if args.command == "gui":
+            from scripts import gui
+
+            return gui.main()
         if args.command != "config":
             storage.ensure_storage_layout(root)
         if args.command == "add":
@@ -364,6 +370,7 @@ def _handle_learn(args: argparse.Namespace, root: Path) -> None:
         print(f"saved learning prompt: {prompt_path}")
         print(f"doc_id: {target['item']['id']}")
         print(f"mode: {target['mode']}")
+        _print_initialize_review_hint(target["item"]["id"], target["mode"], root)
         return
 
     if args.learn_command == "pause":
@@ -384,9 +391,24 @@ def _handle_learn(args: argparse.Namespace, root: Path) -> None:
         print(f"saved learning prompt: {prompt_path}")
         print(f"doc_id: {args.id}")
         print(f"mode: {mode}")
+        _print_initialize_review_hint(args.id, mode, root)
         return
 
     raise ValueError("learn requires queue, list, next, pause, consolidate, or --id")
+
+
+def _print_initialize_review_hint(doc_id: str, mode: str, root: Path) -> None:
+    if mode != "outline":
+        return
+
+    output_dir = storage.get_learning_outputs_root(root) / doc_id
+    state_path = storage.get_learning_states_root(root) / doc_id / "state.json"
+    print("after agent completes initialize, review:")
+    print(f"  status: python pkls status --id {doc_id}")
+    print(f"  outline: {output_dir / 'outline.md'}")
+    print(f"  published_outline: {local_config.get_notes_publish_root(root) / publish.PUBLISH_ROOT_DIR / 'learning' / 'outlines' / f'{doc_id}.md'}")
+    print(f"  state: {state_path}")
+    print(f"  chunk_manifest: {output_dir / 'chunk_manifest.json'} if processing_mode is chunked")
 
 
 def _handle_status(doc_id: str, root: Path) -> None:

@@ -1,70 +1,20 @@
 # Triage Prompt
 
-You are the triage engine for a personal knowledge system.
+Read `docs/architecture.md`, `docs/schema.md`, and `docs/prompt_spec.md`, then the execution context.
 
-Your job is to make a bounded, trustworthy triage decision and update the local files for that decision.
+Make a bounded decision: `learn`, `skim`, or `skip`. Verify fast-changing claims from official sources when needed.
 
-## Read First
+Rules:
 
-Always read these project files first:
+* sample large sources; do not do full learning here
+* update metadata: set `ai_recommendation`, keep status `candidate`, preserve `manual_decision`
+* write and publish the triage card when complete
 
-* docs/architecture.md
-* docs/schema.md
-* docs/prompt_spec.md
+Card format:
 
-Then read the execution-context files provided in the generated prompt.
+* `## Summary`: 1 sentence
+* `## Key Points`: 2-3 bullets, one line each
+* `## Recommendation`: exactly `learn`, `skim`, or `skip`
+* `## Reason`: 1 sentence
 
-If the content is about a fast-changing product, library, company, model, API, or standard, verify critical time-sensitive claims from official sources before making the recommendation.
-
-## What To Evaluate
-
-* what the content is mainly about
-* whether the main claims appear truthful and evidence-based
-* whether the source and argumentation look reliable enough to trust
-* whether it deserves deep learning, a quick skim, or a skip
-
-## Triage Boundaries
-
-Triage is bounded and decision-oriented.
-
-* do not turn triage into full-document learning
-* short items may be read fully when cheap
-* large PDFs, books, and repositories should be sampled strategically instead of read in full
-
-## Required File Updates
-
-You must update:
-
-* records/<source_type>/<doc_id>/metadata.json
-* triage/cards/<doc_id>.md
-* the published Obsidian triage note when the card is complete
-
-In metadata.json:
-
-* update ai_recommendation
-* keep status as candidate
-* do not auto-accept the item
-* preserve manual_decision unless explicitly instructed otherwise
-
-In the triage card markdown, include:
-
-* summary
-* key points
-* recommendation
-* reason
-
-Treat a triage card as complete only when all four sections above are present and non-empty. When the card is complete, also publish it to the Obsidian path provided in the execution context.
-
-## Recommendation Rules
-
-* use `learn` only if the material is worth a focused learning session
-* use `skim` if it is useful but not a top-priority study item
-* use `skip` if it is unreliable, low-value, or not worth time investment
-
-## Quality Bar
-
-Your triage output should make it easy for the user to answer:
-
-* What is this about?
-* Can I trust it?
-* Is it worth learning?
+Keep the whole card compact, about 80-140 words unless the source truly needs more.

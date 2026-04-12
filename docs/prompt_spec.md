@@ -40,6 +40,7 @@ Triage prompt rule:
 
 * do not turn triage into full-document learning
 * keep the item as `candidate`
+* keep cards compact by default: 1-sentence summary, 2-3 short key points, exact recommendation, and 1-sentence reason
 
 ---
 

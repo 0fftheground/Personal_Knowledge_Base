@@ -383,7 +383,7 @@ def read_raw_text_for_item(item: dict[str, Any], root: Path | None = None) -> st
     except UnicodeDecodeError as exc:
         LOGGER.error("Failed to decode raw content as utf-8: %s", content_path)
         raise StorageError(f"raw file is not valid utf-8 text: {content_path}") from exc
-    LOGGER.info("Read raw content: %s", content_path)
+    LOGGER.debug("Read raw content: %s", content_path)
     return text
 
 

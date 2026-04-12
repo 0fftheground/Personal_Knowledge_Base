@@ -198,6 +198,16 @@ This prompt should tell the AI agent to:
 * choose `single_pass` or `chunked`
 * set metadata status to `learning`
 
+After the agent completes the initialize prompt, the user-facing review points are:
+
+* `python pkls status --id <content_id>`
+* `<workspace_root>/learning/outputs/<content_id>/outline.md`
+* the Obsidian note `pkls/learning/outlines/<content_id>.md`, which is published automatically after initialization
+* `<workspace_root>/learning/states/<content_id>/state.json`
+* `<workspace_root>/learning/outputs/<content_id>/chunk_manifest.json` if the item is chunked
+
+`outline.md` is the readable framework. `state.json` is the resumability record and contains `core_summary`, `document_outline`, `processing_mode`, and `next_action`.
+
 ### Step 2: start a focus session
 
 Run:

@@ -89,6 +89,25 @@ Notes:
 * `workspace_root` stores records, triage cards, learning state, outputs, and consolidation drafts
 * `.pkls.local.json` is local-only and should not be committed
 
+### Desktop GUI
+
+If you prefer a local windowed workflow, launch:
+
+```bash
+python pkls gui
+```
+
+The GUI keeps the same storage and state files as the CLI. It gives you:
+
+* add-new-content by file picker or drag-and-drop when `tkinterdnd2` is available
+* triage prompt generation and candidate decisions in one place
+* learning prompt generation, queue review, pause, and consolidation prompts
+* config review and edits for `.pkls.local.json`
+* list filters plus one-click open/copy actions for raw files, metadata, triage cards, learning state, and outputs
+
+Drag-and-drop is optional. If the extra package is not installed, the file picker still works.
+To enable drag-and-drop, install `tkinterdnd2` in the same Python environment you use for `pkls`.
+
 ---
 
 ## 3. Add New Content
@@ -229,6 +248,16 @@ This should initialize:
 * the core summary
 * the processing mode: `single_pass` or `chunked`
 * the initial `next_action`
+
+After the AI agent runs the generated initialize prompt, review the result in this order:
+
+* `python pkls status --id <content_id>` for status, progress, processing mode, and `next_action`
+* `<workspace_root>/learning/outputs/<content_id>/outline.md` for the document framework
+* the Obsidian note `pkls/learning/outlines/<content_id>.md`, which is published automatically after initialization
+* `<workspace_root>/learning/states/<content_id>/state.json` for `core_summary`, `document_outline`, `processing_mode`, and `next_action`
+* `<workspace_root>/learning/outputs/<content_id>/chunk_manifest.json` only when the processing mode is `chunked`
+
+Initialize usually does not produce `summary.md` or `insights.md`; those belong to later focus sessions and pause/resume work. In Obsidian, the initialized outline is published under `pkls/learning/outlines/<content_id>.md`.
 
 ### Step 3: start a focus session
 

@@ -1,30 +1,12 @@
 # Learning Pause Prompt
 
-You are closing or pausing an interactive learning session.
+Read `docs/architecture.md`, `docs/schema.md`, `docs/learning_strategy.md`, and `docs/prompt_spec.md`, then the execution context.
 
-Your job is to persist the useful results of the current session back into local files so the work can resume later without relying on chat history.
+Persist the current learning session so it can resume without chat history.
 
-## Read First
+Rules:
 
-Always read these project files first:
-
-* docs/architecture.md
-* docs/schema.md
-* docs/learning_strategy.md
-* docs/prompt_spec.md
-
-Then read the execution-context files provided in the generated prompt.
-
-## Goals
-
-* capture what was actually learned in this session
-* update local state and summaries
-* leave a strong `next_action`
-* preserve resumability
-
-## Rules
-
-* use the current learning conversation as the source for session details
-* save only stable, useful learning outcomes
-* do not generate `qa.md` unless the user explicitly asked for review questions
-* keep the saved state compact and actionable
+* save only stable, useful outcomes
+* update state, summary, insights, queue, and `next_action`
+* keep saved notes compact and actionable
+* do not generate `qa.md` unless explicitly requested
